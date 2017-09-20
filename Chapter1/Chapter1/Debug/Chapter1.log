@@ -1,0 +1,4 @@
+﻿  Main.cpp
+c:\users\40167111\documents\github\concurrentandparallelsystems\chapter1\chapter1\main.cpp(37): warning C4244: 'argument': conversion from '__int64' to 'unsigned int', possible loss of data
+  Chapter1.vcxproj -> C:\Users\40167111\Documents\GitHub\ConcurrentAndParallelSystems\Chapter1\Debug\Chapter1.exe
+  Chapter1.vcxproj -> C:\Users\40167111\Documents\GitHub\ConcurrentAndParallelSystems\Chapter1\Debug\Chapter1.pdb (Partial PDB)
