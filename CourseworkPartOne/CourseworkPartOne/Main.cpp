@@ -9,7 +9,9 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-
+#include <atomic>
+#include <omp.h>
+#include <thread>
 using namespace std;
 using namespace std::chrono;
 
@@ -131,13 +133,17 @@ struct sphere
 	}
 };
 
+
 inline bool intersect(const vector<sphere> &spheres, const ray &ray, double &distance, size_t &sphere_index) noexcept
 {
 	static constexpr double maximum_distance = 1e20;
 	distance = maximum_distance;
-	for (size_t index = 0; index < spheres.size(); ++index)
+	double temp_distance;
+	int index;
+	//#pragma omp parallel for private(index)
+	for (index = 0; index < spheres.size(); index++)
 	{
-		double temp_distance = spheres[index].intersection(ray);
+		temp_distance = spheres[index].intersection(ray);
 		if (temp_distance > 0 && temp_distance < distance)
 		{
 			distance = temp_distance;
@@ -291,9 +297,9 @@ bool array2bmp(const std::string &filename, const vector<vec> &pixels, const siz
 
 int main(int argc, char **argv)
 {
-	ofstream file;
-	file.open("Dim(4096).txt");
-	for (int i = 0; i < 100; i++)
+	//ofstream file;
+	//file.open("Dim(4096).txt");
+	for (int i = 0; i < 1; i++)
 	{
 		clock_t t;
 		t = clock();
@@ -303,7 +309,7 @@ int main(int argc, char **argv)
 		auto get_random_number = bind(distribution, generator);
 
 		// *** These parameters can be manipulated in the algorithm to modify work undertaken ***
-		constexpr size_t dimension = 4096;
+		constexpr size_t dimension = 1024;
 		constexpr size_t samples = 1; // Algorithm performs 4 * samples per pixel.
 		vector<sphere> spheres
 		{
@@ -325,7 +331,9 @@ int main(int argc, char **argv)
 		vec r;
 		vector<vec> pixels(dimension * dimension);
 
-		for (size_t y = 0; y < dimension; ++y)
+		int y;
+		#pragma omp parallel for private(y)
+		for ( y = 0; y < dimension; ++y)
 		{
 			cout << "Rendering " << dimension << " * " << dimension << "pixels. Samples:" << samples * 4 << " spp (" << 100.0 * y / (dimension - 1) << ")" << endl;
 			for (size_t x = 0; x < dimension; ++x)
@@ -335,7 +343,9 @@ int main(int argc, char **argv)
 					for (size_t sx = 0; sx < 2; ++sx)
 					{
 						r = vec();
-						for (size_t s = 0; s < samples; ++s)
+						int s;
+						#pragma omp parallel for private(s)
+						for (s = 0; s < samples; ++s)
 						{
 							double r1 = 2 * get_random_number(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
 							double r2 = 2 * get_random_number(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
@@ -352,9 +362,11 @@ int main(int argc, char **argv)
 
 
 		t = clock() - t;
-		file << (float)t/CLOCKS_PER_SEC << endl;
+		cout << (float)t/CLOCKS_PER_SEC << endl;
+		system("Pause");
+		//file << (float)t/CLOCKS_PER_SEC << endl;
 		// Print t to file.
 	}
-	file.close();
+	//file.close();
 	return 0;
 }
