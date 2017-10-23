@@ -1,0 +1,11 @@
+﻿  Main.cpp
+Main.cpp(265): warning C4267: 'argument': conversion from 'size_t' to 'unsigned long', possible loss of data
+Main.cpp(271): warning C4267: 'argument': conversion from 'size_t' to 'unsigned long', possible loss of data
+Main.cpp(273): warning C4267: 'argument': conversion from 'size_t' to 'unsigned long', possible loss of data
+Main.cpp(286): warning C4267: 'argument': conversion from 'size_t' to 'unsigned int', possible loss of data
+  Generating code
+  9 of 297 functions ( 3.0%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    27 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  CourseworkPartOne.vcxproj -> C:\Users\40167111\Documents\GitHub\ConcurrentAndParallelSystems\CourseworkPartOne\x64\Release\CourseworkPartOne.exe
