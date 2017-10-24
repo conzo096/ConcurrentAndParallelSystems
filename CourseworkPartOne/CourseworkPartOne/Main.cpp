@@ -12,6 +12,7 @@
 #include <atomic>
 #include <omp.h>
 #include <thread>
+#include <mutex>
 using namespace std;
 using namespace std::chrono;
 
@@ -310,7 +311,7 @@ int main(int argc, char **argv)
 
 		// *** These parameters can be manipulated in the algorithm to modify work undertaken ***
 		constexpr size_t dimension = 1024;
-		constexpr size_t samples = 1; // Algorithm performs 4 * samples per pixel.
+		constexpr size_t samples = 4; // Algorithm performs 4 * samples per pixel.
 		vector<sphere> spheres
 		{
 			sphere(1e5, vec(1e5 + 1, 40.8, 81.6), vec(), vec(0.75, 0.25, 0.25), reflection_type::DIFFUSE),
@@ -328,9 +329,9 @@ int main(int argc, char **argv)
 		ray camera(vec(50, 52, 295.6), vec(0, -0.042612, -1).normal());
 		vec cx = vec(0.5135);
 		vec cy = (cx.cross(camera.direction)).normal() * 0.5135;
-		vec r;
+		//vec r;
 		vector<vec> pixels(dimension * dimension);
-
+		mutex mut;
 		int y;
 		#pragma omp parallel for private(y)
 		for ( y = 0; y < dimension; ++y)
@@ -342,9 +343,9 @@ int main(int argc, char **argv)
 				{
 					for (size_t sx = 0; sx < 2; ++sx)
 					{
-						r = vec();
+						vec r = vec();
 						int s;
-						#pragma omp parallel for private(s)
+						//#pragma omp parallel for private(s)
 						for (s = 0; s < samples; ++s)
 						{
 							double r1 = 2 * get_random_number(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
@@ -352,7 +353,9 @@ int main(int argc, char **argv)
 							vec direction = cx * static_cast<double>(((sx + 0.5 + dx) / 2 + x) / dimension - 0.5) + cy * static_cast<double>(((sy + 0.5 + dy) / 2 + y) / dimension - 0.5) + camera.direction;
 							r = r + radiance(spheres, ray(camera.origin + direction * 140, direction.normal()), 0) * (1.0 / samples);
 						}
+						mut.lock();
 						pixels[i] = pixels[i] + vec(clamp(r.x, 0.0, 1.0), clamp(r.y, 0.0, 1.0), clamp(r.z, 0.0, 1.0)) * 0.25;
+						mut.unlock();
 					}
 				}
 			}
