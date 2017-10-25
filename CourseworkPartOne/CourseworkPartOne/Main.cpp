@@ -18,7 +18,7 @@ using namespace std::chrono;
 
 constexpr size_t MAX_DEPTH = 512; // Upper limit on recursion, increase this on systems with more stack size.
 constexpr double PI = 3.14159265359;
-
+mutex mut;
 template <class T, class Compare>
 constexpr const T &clamp(const T &v, const T &lo, const T &hi, Compare comp)
 {
@@ -286,6 +286,7 @@ bool array2bmp(const std::string &filename, const vector<vec> &pixels, const siz
 		for (size_t y = 0; y < width; y++)
 		{
 			const auto &val = pixels[((x - 1) * width) + y];
+			//cout << val.x << " " << val.y << " " << val.z << endl;
 			f.put(static_cast<char>(int(255.0 * val.z))).put(static_cast<char>(int(255.0 * val.y))).put(static_cast<char>(255.0 * val.x));
 		}
 		if (padding_size)
@@ -296,22 +297,77 @@ bool array2bmp(const std::string &filename, const vector<vec> &pixels, const siz
 	return f.good();
 }
 
+
+void WriteToPixel()
+{
+	/*mut.lock();
+	pixels[i] = pixels[i] + vec(clamp(r.x, 0.0, 1.0), clamp(r.y, 0.0, 1.0), clamp(r.z, 0.0, 1.0)) * 0.25;
+	mut.unlock();*/
+
+}
+
+
+void CalculatePixelValue(int dimension, int samples,vector<sphere>& spheres,
+		int start, int end,vector<vec>& pixels)
+{
+	ray camera(vec(50, 52, 295.6), vec(0, -0.042612, -1).normal());
+	vec cx = vec(0.5135);
+	vec cy = (cx.cross(camera.direction)).normal() * 0.5135;
+
+	random_device rd;
+	default_random_engine generator(rd());
+	uniform_real_distribution<double> distribution;
+	auto get_random_number = bind(distribution, generator);
+	for (int y = start; y <= end; ++y)
+	{
+		cout << "Rendering " << dimension << " * " << dimension << "pixels. Samples:" << samples * 4 << " spp (" << 100.0 * y / (dimension - 1) << ")" << endl;
+		//cout << this_thread::get_id() << endl;
+		for (size_t x = 0; x < dimension; ++x)
+		{
+			for (size_t sy = 0, i = (dimension - y - 1) * dimension + x; sy < 2; ++sy)
+			{
+				for (size_t sx = 0; sx < 2; ++sx)
+				{
+					vec r = vec();
+					//int s;
+				//	#pragma omp parallel for private(s)
+					for (int s = 0; s < samples; ++s)
+					{
+						double r1 = 2 * get_random_number(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
+						double r2 = 2 * get_random_number(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
+						vec direction = cx * static_cast<double>(((sx + 0.5 + dx) / 2 + x) / dimension - 0.5) + cy * static_cast<double>(((sy + 0.5 + dy) / 2 + y) / dimension - 0.5) + camera.direction;
+						r = r + radiance(spheres, ray(camera.origin + direction * 140, direction.normal()), 0) * (1.0 / samples);
+					}
+					mut.lock();
+					vec col = pixels[i] + vec(clamp(r.x, 0.0, 1.0), clamp(r.y, 0.0, 1.0), clamp(r.z, 0.0, 1.0)) * 0.25;
+					pixels[i] = pixels[i] + col;
+				//	cout << pixels[i].x <<" " << pixels[i].y << " " << pixels[i].z << endl;
+					mut.unlock();
+				}
+			}
+		}
+	}
+
+}
+
+
+
 int main(int argc, char **argv)
 {
 	//ofstream file;
 	//file.open("Dim(4096).txt");
-	for (int i = 0; i < 1; i++)
+	//for (int i = 0; i < 1; i++)
 	{
 		clock_t t;
 		t = clock();
-		random_device rd;
+		/*random_device rd;
 		default_random_engine generator(rd());
 		uniform_real_distribution<double> distribution;
-		auto get_random_number = bind(distribution, generator);
+		auto get_random_number = bind(distribution, generator);*/
 
 		// *** These parameters can be manipulated in the algorithm to modify work undertaken ***
 		constexpr size_t dimension = 1024;
-		constexpr size_t samples = 4; // Algorithm performs 4 * samples per pixel.
+		constexpr size_t samples = 1; // Algorithm performs 4 * samples per pixel.
 		vector<sphere> spheres
 		{
 			sphere(1e5, vec(1e5 + 1, 40.8, 81.6), vec(), vec(0.75, 0.25, 0.25), reflection_type::DIFFUSE),
@@ -326,47 +382,68 @@ int main(int argc, char **argv)
 		};
 		// **************************************************************************************
 
-		ray camera(vec(50, 52, 295.6), vec(0, -0.042612, -1).normal());
+		/*ray camera(vec(50, 52, 295.6), vec(0, -0.042612, -1).normal());
 		vec cx = vec(0.5135);
 		vec cy = (cx.cross(camera.direction)).normal() * 0.5135;
-		//vec r;
+		vec r;
+		*/
 		vector<vec> pixels(dimension * dimension);
-		mutex mut;
-		int y;
-		#pragma omp parallel for private(y)
-		for ( y = 0; y < dimension; ++y)
+		
+
+		// Create number of threads equal to what hardware can handle.
+		int threadNum = thread::hardware_concurrency();
+		vector<thread> threadList;
+
+		for (int i = 0; i < threadNum; i++)
 		{
-			cout << "Rendering " << dimension << " * " << dimension << "pixels. Samples:" << samples * 4 << " spp (" << 100.0 * y / (dimension - 1) << ")" << endl;
-			for (size_t x = 0; x < dimension; ++x)
-			{
-				for (size_t sy = 0, i = (dimension - y - 1) * dimension + x; sy < 2; ++sy)
-				{
-					for (size_t sx = 0; sx < 2; ++sx)
-					{
-						vec r = vec();
-						int s;
-						//#pragma omp parallel for private(s)
-						for (s = 0; s < samples; ++s)
-						{
-							double r1 = 2 * get_random_number(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
-							double r2 = 2 * get_random_number(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
-							vec direction = cx * static_cast<double>(((sx + 0.5 + dx) / 2 + x) / dimension - 0.5) + cy * static_cast<double>(((sy + 0.5 + dy) / 2 + y) / dimension - 0.5) + camera.direction;
-							r = r + radiance(spheres, ray(camera.origin + direction * 140, direction.normal()), 0) * (1.0 / samples);
-						}
-						mut.lock();
-						pixels[i] = pixels[i] + vec(clamp(r.x, 0.0, 1.0), clamp(r.y, 0.0, 1.0), clamp(r.z, 0.0, 1.0)) * 0.25;
-						mut.unlock();
-					}
-				}
-			}
+			int length = dimension / threadNum;
+			int start = i*length;
+			int end = ((i + 1)*length) - 1;
+			threadList.push_back(thread(CalculatePixelValue,dimension,samples,spheres,start,end,std::ref(pixels)));
+
 		}
+
+
+		// Collect threads.
+		for(auto &t : threadList)
+			t.join();
+
+		//#pragma omp parallel for private(y)
+		//for (int y = 0; y < dimension; ++y)
+		//{
+		//	cout << "Rendering " << dimension << " * " << dimension << "pixels. Samples:" << samples * 4 << " spp (" << 100.0 * y / (dimension - 1) << ")" << endl;
+		//	for (size_t x = 0; x < dimension; ++x)
+		//	{
+		//		for (size_t sy = 0, i = (dimension - y - 1) * dimension + x; sy < 2; ++sy)
+		//		{
+		//			for (size_t sx = 0; sx < 2; ++sx)
+		//			{
+		//				vec r = vec();
+		//				int s;
+		//				//#pragma omp parallel for private(s)
+		//				for (s = 0; s < samples; ++s)
+		//				{
+		//					double r1 = 2 * get_random_number(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
+		//					double r2 = 2 * get_random_number(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
+		//					vec direction = cx * static_cast<double>(((sx + 0.5 + dx) / 2 + x) / dimension - 0.5) + cy * static_cast<double>(((sy + 0.5 + dy) / 2 + y) / dimension - 0.5) + camera.direction;
+		//					r = r + radiance(spheres, ray(camera.origin + direction * 140, direction.normal()), 0) * (1.0 / samples);
+		//				}
+		//				mut.lock();
+		//				pixels[i] = pixels[i] + vec(clamp(r.x, 0.0, 1.0), clamp(r.y, 0.0, 1.0), clamp(r.z, 0.0, 1.0)) * 0.25;
+		//				mut.unlock();
+		//			}
+		//		}
+		//	}
+		//}
+
+
 		cout << "img.bmp" << (array2bmp("img.bmp", pixels, dimension, dimension) ? " Saved\n" : " Save Failed\n");
 
 
 
 		t = clock() - t;
 		cout << (float)t/CLOCKS_PER_SEC << endl;
-		system("Pause");
+	//	system("Pause");
 		//file << (float)t/CLOCKS_PER_SEC << endl;
 		// Print t to file.
 	}
