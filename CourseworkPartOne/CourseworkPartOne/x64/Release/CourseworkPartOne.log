@@ -56,8 +56,8 @@ C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\Tools\MSVC\14.1
               _Fn=void (__cdecl &)(int,int,std::vector<sphere,std::allocator<sphere>> &,int,int,std::vector<vec,std::allocator<vec>> &)
           ]
   Generating code
-  21 of 476 functions ( 4.4%) were compiled, the rest were copied from previous compilation.
+  14 of 472 functions ( 3.0%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    2 functions had inline decision re-evaluated but remain unchanged
+    0 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   CourseworkPartOne.vcxproj -> C:\Users\40167111\Documents\GitHub\ConcurrentAndParallelSystems\CourseworkPartOne\x64\Release\CourseworkPartOne.exe

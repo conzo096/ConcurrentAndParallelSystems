@@ -320,7 +320,7 @@ void CalculatePixelValue(int dimension, int samples,vector<sphere>& spheres,
 	auto get_random_number = bind(distribution, generator);
 	for (int y = start; y <= end; ++y)
 	{
-		cout << "Rendering " << dimension << " * " << dimension << "pixels. Samples:" << samples * 4 << " spp (" << 100.0 * y / (dimension - 1) << ")" << endl;
+		//cout << "Rendering " << dimension << " * " << dimension << "pixels. Samples:" << samples * 4 << " spp (" << 100.0 * y / (dimension - 1) << ")" << endl;
 		//cout << this_thread::get_id() << endl;
 		for (size_t x = 0; x < dimension; ++x)
 		{
@@ -354,20 +354,20 @@ void CalculatePixelValue(int dimension, int samples,vector<sphere>& spheres,
 
 int main(int argc, char **argv)
 {
-	//ofstream file;
-	//file.open("Dim(4096).txt");
-	//for (int i = 0; i < 1; i++)
+	ofstream file;
+	file.open("ManualSamples(4096).cvs");
+	for (int i = 0; i < 10; i++)
 	{
 		clock_t t;
 		t = clock();
-		/*random_device rd;
+		random_device rd;
 		default_random_engine generator(rd());
 		uniform_real_distribution<double> distribution;
-		auto get_random_number = bind(distribution, generator);*/
+		auto get_random_number = bind(distribution, generator);
 
 		// *** These parameters can be manipulated in the algorithm to modify work undertaken ***
 		constexpr size_t dimension = 1024;
-		constexpr size_t samples = 1; // Algorithm performs 4 * samples per pixel.
+		constexpr size_t samples = 1024; // Algorithm performs 4 * samples per pixel.
 		vector<sphere> spheres
 		{
 			sphere(1e5, vec(1e5 + 1, 40.8, 81.6), vec(), vec(0.75, 0.25, 0.25), reflection_type::DIFFUSE),
@@ -382,11 +382,11 @@ int main(int argc, char **argv)
 		};
 		// **************************************************************************************
 
-		/*ray camera(vec(50, 52, 295.6), vec(0, -0.042612, -1).normal());
+		ray camera(vec(50, 52, 295.6), vec(0, -0.042612, -1).normal());
 		vec cx = vec(0.5135);
 		vec cy = (cx.cross(camera.direction)).normal() * 0.5135;
 		vec r;
-		*/
+		
 		vector<vec> pixels(dimension * dimension);
 		
 
@@ -407,11 +407,12 @@ int main(int argc, char **argv)
 		// Collect threads.
 		for(auto &t : threadList)
 			t.join();
-
+	
+		//int y;
 		//#pragma omp parallel for private(y)
-		//for (int y = 0; y < dimension; ++y)
+		//for (y = 0; y < dimension; ++y)
 		//{
-		//	cout << "Rendering " << dimension << " * " << dimension << "pixels. Samples:" << samples * 4 << " spp (" << 100.0 * y / (dimension - 1) << ")" << endl;
+		//	//cout << "Rendering " << dimension << " * " << dimension << "pixels. Samples:" << samples * 4 << " spp (" << 100.0 * y / (dimension - 1) << ")" << endl;
 		//	for (size_t x = 0; x < dimension; ++x)
 		//	{
 		//		for (size_t sy = 0, i = (dimension - y - 1) * dimension + x; sy < 2; ++sy)
@@ -437,14 +438,14 @@ int main(int argc, char **argv)
 		//}
 
 
-		cout << "img.bmp" << (array2bmp("img.bmp", pixels, dimension, dimension) ? " Saved\n" : " Save Failed\n");
-
+		//cout << "img.bmp" << (array2bmp("img.bmp", pixels, dimension, dimension) ? " Saved\n" : " Save Failed\n");
+		array2bmp("img.bmp", pixels, dimension, dimension);
 
 
 		t = clock() - t;
-		cout << (float)t/CLOCKS_PER_SEC << endl;
+		//cout << (float)t/CLOCKS_PER_SEC << endl;
 	//	system("Pause");
-		//file << (float)t/CLOCKS_PER_SEC << endl;
+		file << (float)t/CLOCKS_PER_SEC << endl;
 		// Print t to file.
 	}
 	//file.close();
