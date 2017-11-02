@@ -354,9 +354,9 @@ void CalculatePixelValue(int dimension, int samples,vector<sphere>& spheres,
 
 int main(int argc, char **argv)
 {
-	ofstream file;
-	file.open("ManualSamples(4096).cvs");
-	for (int i = 0; i < 10; i++)
+	//ofstream file;
+	//file.open("Samples(8).csv");
+	//for (int i = 0; i < 100; i++)
 	{
 		clock_t t;
 		t = clock();
@@ -367,7 +367,7 @@ int main(int argc, char **argv)
 
 		// *** These parameters can be manipulated in the algorithm to modify work undertaken ***
 		constexpr size_t dimension = 1024;
-		constexpr size_t samples = 1024; // Algorithm performs 4 * samples per pixel.
+		constexpr size_t samples = 1; // Algorithm performs 4 * samples per pixel.
 		vector<sphere> spheres
 		{
 			sphere(1e5, vec(1e5 + 1, 40.8, 81.6), vec(), vec(0.75, 0.25, 0.25), reflection_type::DIFFUSE),
@@ -390,7 +390,7 @@ int main(int argc, char **argv)
 		vector<vec> pixels(dimension * dimension);
 		
 
-		// Create number of threads equal to what hardware can handle.
+		//// Create number of threads equal to what hardware can handle.
 		int threadNum = thread::hardware_concurrency();
 		vector<thread> threadList;
 
@@ -408,45 +408,36 @@ int main(int argc, char **argv)
 		for(auto &t : threadList)
 			t.join();
 	
-		//int y;
-		//#pragma omp parallel for private(y)
-		//for (y = 0; y < dimension; ++y)
-		//{
-		//	//cout << "Rendering " << dimension << " * " << dimension << "pixels. Samples:" << samples * 4 << " spp (" << 100.0 * y / (dimension - 1) << ")" << endl;
-		//	for (size_t x = 0; x < dimension; ++x)
-		//	{
-		//		for (size_t sy = 0, i = (dimension - y - 1) * dimension + x; sy < 2; ++sy)
-		//		{
-		//			for (size_t sx = 0; sx < 2; ++sx)
-		//			{
-		//				vec r = vec();
-		//				int s;
-		//				//#pragma omp parallel for private(s)
-		//				for (s = 0; s < samples; ++s)
-		//				{
-		//					double r1 = 2 * get_random_number(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
-		//					double r2 = 2 * get_random_number(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
-		//					vec direction = cx * static_cast<double>(((sx + 0.5 + dx) / 2 + x) / dimension - 0.5) + cy * static_cast<double>(((sy + 0.5 + dy) / 2 + y) / dimension - 0.5) + camera.direction;
-		//					r = r + radiance(spheres, ray(camera.origin + direction * 140, direction.normal()), 0) * (1.0 / samples);
-		//				}
-		//				mut.lock();
-		//				pixels[i] = pixels[i] + vec(clamp(r.x, 0.0, 1.0), clamp(r.y, 0.0, 1.0), clamp(r.z, 0.0, 1.0)) * 0.25;
-		//				mut.unlock();
-		//			}
-		//		}
-		//	}
-		//}
-
-
-		//cout << "img.bmp" << (array2bmp("img.bmp", pixels, dimension, dimension) ? " Saved\n" : " Save Failed\n");
-		array2bmp("img.bmp", pixels, dimension, dimension);
-
+	/*	int y;
+		#pragma omp parallel for num_threads(8) private(y)
+		for (y = 0; y < dimension; ++y)
+		{
+			for (size_t x = 0; x < dimension; ++x)
+			{
+				for (size_t sy = 0, i = (dimension - y - 1) * dimension + x; sy < 2; ++sy)
+				{
+					for (size_t sx = 0; sx < 2; ++sx)
+					{
+						vec r = vec();
+						int s;
+						for (s = 0; s < samples; ++s)
+						{
+							double r1 = 2 * get_random_number(), dx = r1 < 1 ? sqrt(r1) - 1 : 1 - sqrt(2 - r1);
+							double r2 = 2 * get_random_number(), dy = r2 < 1 ? sqrt(r2) - 1 : 1 - sqrt(2 - r2);
+							vec direction = cx * static_cast<double>(((sx + 0.5 + dx) / 2 + x) / dimension - 0.5) + cy * static_cast<double>(((sy + 0.5 + dy) / 2 + y) / dimension - 0.5) + camera.direction;
+							r = r + radiance(spheres, ray(camera.origin + direction * 140, direction.normal()), 0) * (1.0 / samples);
+						}
+							pixels[i] = pixels[i] + vec(clamp(r.x, 0.0, 1.0), clamp(r.y, 0.0, 1.0), clamp(r.z, 0.0, 1.0)) * 0.25;
+					}
+				}
+			}
+		}*/
 
 		t = clock() - t;
-		//cout << (float)t/CLOCKS_PER_SEC << endl;
-	//	system("Pause");
-		file << (float)t/CLOCKS_PER_SEC << endl;
-		// Print t to file.
+		//cout << (float)t / CLOCKS_PER_SEC << endl;
+		//cout << "img.bmp" << (array2bmp("img.bmp", pixels, dimension, dimension) ? " Saved\n" : " Save Failed\n");
+		array2bmp("img.bmp", pixels, dimension, dimension);
+		//file << (float)t/CLOCKS_PER_SEC << endl;
 	}
 	//file.close();
 	return 0;
