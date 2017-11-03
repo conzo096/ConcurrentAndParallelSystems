@@ -141,7 +141,6 @@ inline bool intersect(const vector<sphere> &spheres, const ray &ray, double &dis
 	distance = maximum_distance;
 	double temp_distance;
 	int index;
-	//#pragma omp parallel for private(index)
 	for (index = 0; index < spheres.size(); index++)
 	{
 		temp_distance = spheres[index].intersection(ray);
@@ -298,15 +297,6 @@ bool array2bmp(const std::string &filename, const vector<vec> &pixels, const siz
 }
 
 
-void WriteToPixel()
-{
-	/*mut.lock();
-	pixels[i] = pixels[i] + vec(clamp(r.x, 0.0, 1.0), clamp(r.y, 0.0, 1.0), clamp(r.z, 0.0, 1.0)) * 0.25;
-	mut.unlock();*/
-
-}
-
-
 void CalculatePixelValue(int dimension, int samples,vector<sphere>& spheres,
 		int start, int end,vector<vec>& pixels)
 {
@@ -354,9 +344,9 @@ void CalculatePixelValue(int dimension, int samples,vector<sphere>& spheres,
 
 int main(int argc, char **argv)
 {
-	//ofstream file;
-	//file.open("Samples(8).csv");
-	//for (int i = 0; i < 100; i++)
+	ofstream file;
+	file.open("ManualDim(4096).csv");
+	for (int i = 0; i < 100; i++)
 	{
 		clock_t t;
 		t = clock();
@@ -366,7 +356,7 @@ int main(int argc, char **argv)
 		auto get_random_number = bind(distribution, generator);
 
 		// *** These parameters can be manipulated in the algorithm to modify work undertaken ***
-		constexpr size_t dimension = 1024;
+		constexpr size_t dimension = 4096;
 		constexpr size_t samples = 1; // Algorithm performs 4 * samples per pixel.
 		vector<sphere> spheres
 		{
@@ -391,7 +381,7 @@ int main(int argc, char **argv)
 		
 
 		//// Create number of threads equal to what hardware can handle.
-		int threadNum = thread::hardware_concurrency();
+		int threadNum = 8;
 		vector<thread> threadList;
 
 		for (int i = 0; i < threadNum; i++)
@@ -437,7 +427,7 @@ int main(int argc, char **argv)
 		//cout << (float)t / CLOCKS_PER_SEC << endl;
 		//cout << "img.bmp" << (array2bmp("img.bmp", pixels, dimension, dimension) ? " Saved\n" : " Save Failed\n");
 		array2bmp("img.bmp", pixels, dimension, dimension);
-		//file << (float)t/CLOCKS_PER_SEC << endl;
+		file << (float)t/CLOCKS_PER_SEC << endl;
 	}
 	//file.close();
 	return 0;
