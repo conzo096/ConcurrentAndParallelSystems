@@ -7,10 +7,10 @@ in vec4 particlecolor;
 // Ouput data
 out vec4 color;
 
-uniform sampler2D myTextureSampler;
+uniform sampler2D tex;
 
 void main()
 {
-	color = vec4(255,0,0,1);
-	color.a = 1;
+	color =  texture(tex,UV) * particlecolor;
+	//color.a = 1;
 }

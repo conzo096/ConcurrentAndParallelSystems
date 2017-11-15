@@ -40,22 +40,22 @@ void Camera::CheckForMovement(float deltaTime)
 	glm::vec3 movement;
 	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
 	{
-		movement += glm::vec3(0, 0, 0.5);
+		movement += glm::vec3(0, 0, 5)*deltaTime;
 		translation += movement;
 	}
 	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 	{
-		movement += glm::vec3(0, 0, -0.5);
+		movement += glm::vec3(0, 0, -5)*deltaTime;
 		translation += movement;
 	}
 	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
 	{
-		movement += glm::vec3(-0.5, 0, 0);
+		movement += glm::vec3(-5, 0, 0)*deltaTime;
 		translation += movement;
 	}
 	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
 	{
-		movement += glm::vec3(0.5, 0, 0);
+		movement += glm::vec3(5, 0, 0)*deltaTime;
 		translation += movement;
 	}
 }
