@@ -18,7 +18,9 @@
 #include <algorithm>
 #include "Texture.h"
 #include <glm\gtx\string_cast.hpp>
-#define MAXPARTICLES 10
+#include <omp.h>
+#include <thread>
+#define MAXPARTICLES 500
 
 Texture tex;
 Camera camera;
@@ -45,8 +47,8 @@ struct Particle
 		if (dist == 0)
 			dist = 0.0001;
 		//6.673e-11
-		double F = (6.673e-11) * (mass * b.mass / (dist*dist));
-		force += F*glm::normalize(b.pos-pos);
+		double F = (6.673e-4) * (mass * b.mass / (dist*dist));
+		force += F * (b.pos-pos)/dist;
 	}
 
 	void Update(double deltaTime)
@@ -79,12 +81,54 @@ GLuint particles_color_buffer;
 GLuint billboard_vertex_buffer;
 int LastUsedParticle = 0;
 
-
+// Sort the particle order by closest to camera.
 void SortParticles()
 {
 	std::sort(&ParticlesContainer[0], &ParticlesContainer[MAXPARTICLES]);
 }
 
+
+// Update each particle, against all other particles in the scene.
+void SimulateParticles()
+{
+	for (int i = 0; i<MAXPARTICLES; i++)
+	{
+		// Get particle and reset its current force.
+		Particle& p = ParticlesContainer[i];
+		p.ResetForce();
+		for (int j = 0; j < MAXPARTICLES; j++)
+		{
+			// Update particle as long as it is not itself.
+			if (i != j)
+			{
+				p.AddForce(ParticlesContainer[j]);
+			}
+		}
+	}
+}
+
+
+// Calculate the new position of all the particles, depending on the force applied to them.
+void UpdateParticles(double deltaTime)
+{
+	for (int i = 0; i < MAXPARTICLES; i++)
+	{
+		Particle& p = ParticlesContainer[i]; // shortcut
+		p.Update(deltaTime);
+		p.cameradistance = glm::length2(p.pos - glm::dvec3(camera.GetPosition()));
+		// Fill the GPU buffer
+		g_particule_position_size_data[4 * i + 0] = p.pos.x;
+		g_particule_position_size_data[4 * i + 1] = p.pos.y;
+		g_particule_position_size_data[4 * i + 2] = p.pos.z;
+
+		g_particule_position_size_data[4 * i + 3] = p.size;
+
+		g_particule_color_data[4 * i + 0] = p.r;
+		g_particule_color_data[4 * i + 1] = p.g;
+		g_particule_color_data[4 * i + 2] = p.b;
+		g_particule_color_data[4 * i + 3] = p.a;
+	}
+}
 
 void Update(double deltaTime)
 {
@@ -103,42 +147,18 @@ void Update(double deltaTime)
 	camera.Rotate(static_cast<float>(delta_x), static_cast<float>(-delta_y)); // flipped y to revert the invert.
 	camera.Update(deltaTime);
 	
-	
-	// Simulate all particles
 
-	for (int i = 0; i<MAXPARTICLES; i++)
-	{
-		Particle& p = ParticlesContainer[i]; 
-		p.ResetForce();
-		for (int j = 0; j < MAXPARTICLES; j++)
-		{
-			if (i != j)
-			{
-				p.AddForce(ParticlesContainer[j]);
-			}
-		}
-	}
-	for (int i = 0; i < MAXPARTICLES; i++)
-	{
-		Particle& p = ParticlesContainer[i]; // shortcut
-		p.Update(1e11* deltaTime);
-		p.cameradistance = glm::length2(p.pos - glm::dvec3(camera.GetPosition()));
-		p.Print();
-		// Fill the GPU buffer
-		g_particule_position_size_data[4 * i + 0] = p.pos.x;
-		g_particule_position_size_data[4 * i + 1] = p.pos.y;
-		g_particule_position_size_data[4 * i + 2] = p.pos.z;
+	// Handle N-Body simulation segment.
+	SimulateParticles();
+	UpdateParticles(deltaTime);
+}
 
-		g_particule_position_size_data[4 * i + 3] = p.size;
 
-		g_particule_color_data[4 * i + 0] = p.r;
-		g_particule_color_data[4 * i + 1] = p.g;
-		g_particule_color_data[4 * i + 2] = p.b;
-		g_particule_color_data[4 * i + 3] = p.a;
-	}
+void Render()
+{
 	SortParticles();
 
-	// Move this outta update.
+	// Update the OpenGL buffers with updated particle positions.
 	glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
 	glBufferData(GL_ARRAY_BUFFER, MAXPARTICLES * 4 * sizeof(GLfloat), NULL, GL_STREAM_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, MAXPARTICLES * sizeof(GLfloat) * 4, g_particule_position_size_data);
@@ -146,13 +166,7 @@ void Update(double deltaTime)
 	glBindBuffer(GL_ARRAY_BUFFER, particles_color_buffer);
 	glBufferData(GL_ARRAY_BUFFER, MAXPARTICLES * 4 * sizeof(GLubyte), NULL, GL_STREAM_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, MAXPARTICLES * sizeof(GLubyte) * 4, g_particule_color_data);
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-}
 
-
-void Render()
-{
 	// Clear the screen
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 //	glClearColor(1, 1, 1, 1);
@@ -216,9 +230,10 @@ int main(void)
 	glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // To make MacOS happy; should not be needed
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	// Open a window and create its OpenGL context
 	window = glfwCreateWindow(1920, 1080, "N-Body Simulation", NULL, NULL);
 	if (window == NULL) {
@@ -283,9 +298,15 @@ int main(void)
 	std::mt19937 generator(seed);
 	std::uniform_real_distribution<double> uniform01(0.0, 1.0);
 
-	double radius = 1e18;        // radius of universe
-	double solarmass = 1.98892e30;
-	for (int i = 1; i < MAXPARTICLES; i++)
+	double radius = 500;        // radius of universe
+	//double solarmass = 100;
+
+	// Get the number of threads this hardware can support.
+	int numThreads = std::thread::hardware_concurrency(); 
+
+	int i;
+	#pragma omp parallel for num_threads(numThreads)  private(i)
+	for (i = 1; i < MAXPARTICLES; i++)
 	{
 		double theta = 2 * glm::pi<double>() * uniform01(generator);
 		double phi = acos(1 - 2 * uniform01(generator));
@@ -293,19 +314,20 @@ int main(void)
 		double y = sin(phi) * sin(theta) * radius;
 		double z = cos(phi) * radius;
 		
-		ParticlesContainer[i].pos = glm::dvec3(x,y,z);
-		ParticlesContainer[i].velocity = glm::dvec3(0,0,0);
+		ParticlesContainer[i].pos = glm::dvec3(x,y,z) ;
+		ParticlesContainer[i].velocity = glm::dvec3(0);
 		ParticlesContainer[i].r = rand() % 256;
 		ParticlesContainer[i].g = rand() % 256;
 		ParticlesContainer[i].b = rand() % 256;
 		ParticlesContainer[i].a = 255;
-		ParticlesContainer[i].mass = rand()*solarmass * 10 + 1e20;
+		ParticlesContainer[i].mass = rand()%260 + 10;
 		ParticlesContainer[i].size = 5;
 	}
+		
 	//Put the central mass in
 	ParticlesContainer[0].pos = glm::dvec3(0, 0, 0);
 	ParticlesContainer[0].velocity = glm::dvec3(0, 0, 0);
-	ParticlesContainer[0].mass = 1e6*solarmass;
+	ParticlesContainer[0].mass = 200;
 	ParticlesContainer[0].r = 255;
 	ParticlesContainer[0].g = 0;
 	ParticlesContainer[0].b = 0;
