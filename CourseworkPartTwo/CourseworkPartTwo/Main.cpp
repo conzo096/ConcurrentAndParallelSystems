@@ -20,37 +20,60 @@
 #include <glm\gtx\string_cast.hpp>
 #include <omp.h>
 #include <thread>
-#define MAXPARTICLES 500
 
+// Number of particles to be generated.
+#define MAXPARTICLES 1500
+// Gravational constant
+#define G 6.673e-2 //6.673e-11;
+
+// Get the number of threads this hardware can support.
+int numThreads = std::thread::hardware_concurrency();
+
+// Texture to make the particle a round shape.
 Texture tex;
+// User controlled camera - Use WASD.
 Camera camera;
+// Simple shader which renders billboarded particles.
 GLShader shader;
 GLFWwindow* window;
+
+// Uniform locations for shader.
 GLuint CameraRight_worldspace_ID;
 GLuint CameraUp_worldspace_ID;
 GLuint ViewProjMatrixID;
-// CPU representation of a particle
+
+
+
+// This class represents the particle.
 struct Particle
 {
+	// Position of the shader.
 	glm::dvec3 pos;
+	// Force acting on the particle - is reset each update.
 	glm::dvec3 force;
+	// Colour of the particle.
 	unsigned char r, g, b, a; 
+	// Size of the particle - does not represent mass!
 	float size;
+	// How far away from the camera is it? This is used to sort the particle list on how close it is to camera.
 	float cameradistance; 
+	// Speed and direction of the particle.
 	glm::dvec3 velocity;     
 	double mass;     
 
+	// Caclulate the force that another particle is having on this particle.
 	void AddForce(Particle& b)
 	{
+		// Get the distance between the two particles.
 		double dist = glm::distance(pos, b.pos);
-		// Nan will appear if dist = 0;
+		// Add a condition to prevent Nan - Is there a better approach to this? 
 		if (dist == 0)
-			dist = 0.0001;
-		//6.673e-11
-		double F = (6.673e-4) * (mass * b.mass / (dist*dist));
+			dist = 0.000001;
+		double F = G * (mass * b.mass / (dist*dist));
 		force += F * (b.pos-pos)/dist;
 	}
 
+	// Update this particle. 
 	void Update(double deltaTime)
 	{
 		velocity += (force / mass);
@@ -61,6 +84,7 @@ struct Particle
 	{
 		force = glm::dvec3(0);
 	}
+
 	bool operator<(const Particle& that) const
 	{
 		// Sort in reverse order : far particles drawn first.
@@ -81,6 +105,7 @@ GLuint particles_color_buffer;
 GLuint billboard_vertex_buffer;
 int LastUsedParticle = 0;
 
+
 // Sort the particle order by closest to camera.
 void SortParticles()
 {
@@ -91,6 +116,7 @@ void SortParticles()
 // Update each particle, against all other particles in the scene.
 void SimulateParticles()
 {
+	//#pragma omp parallel for num_threads(numThreads)  private(i)
 	for (int i = 0; i<MAXPARTICLES; i++)
 	{
 		// Get particle and reset its current force.
@@ -111,22 +137,26 @@ void SimulateParticles()
 // Calculate the new position of all the particles, depending on the force applied to them.
 void UpdateParticles(double deltaTime)
 {
+	#pragma omp parallel for num_threads(numThreads)  private(i)
 	for (int i = 0; i < MAXPARTICLES; i++)
 	{
-		Particle& p = ParticlesContainer[i]; // shortcut
+		Particle& p = ParticlesContainer[i];
+		// Update position of particle.
 		p.Update(deltaTime);
+		// calculate camera distance.
 		p.cameradistance = glm::length2(p.pos - glm::dvec3(camera.GetPosition()));
-		// Fill the GPU buffer
+		// Update GPU buffer with new positions.
 		g_particule_position_size_data[4 * i + 0] = p.pos.x;
 		g_particule_position_size_data[4 * i + 1] = p.pos.y;
 		g_particule_position_size_data[4 * i + 2] = p.pos.z;
-
 		g_particule_position_size_data[4 * i + 3] = p.size;
 
-		g_particule_color_data[4 * i + 0] = p.r;
-		g_particule_color_data[4 * i + 1] = p.g;
-		g_particule_color_data[4 * i + 2] = p.b;
-		g_particule_color_data[4 * i + 3] = p.a;
+		//// Update GPU buffer with colour positions.
+		//g_particule_color_data[4 * i + 0] = p.r;
+		//g_particule_color_data[4 * i + 1] = p.g;
+		//g_particule_color_data[4 * i + 2] = p.b;
+		//g_particule_color_data[4 * i + 3] = p.a;
+
 	}
 }
 
@@ -156,7 +186,7 @@ void Update(double deltaTime)
 
 void Render()
 {
-	SortParticles();
+	//SortParticles();
 
 	// Update the OpenGL buffers with updated particle positions.
 	glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
@@ -298,15 +328,13 @@ int main(void)
 	std::mt19937 generator(seed);
 	std::uniform_real_distribution<double> uniform01(0.0, 1.0);
 
-	double radius = 500;        // radius of universe
+	double radius = 100;        // radius of universe
 	//double solarmass = 100;
 
-	// Get the number of threads this hardware can support.
-	int numThreads = std::thread::hardware_concurrency(); 
+	
 
-	int i;
 	#pragma omp parallel for num_threads(numThreads)  private(i)
-	for (i = 1; i < MAXPARTICLES; i++)
+	for (int i = 1; i < MAXPARTICLES; i++)
 	{
 		double theta = 2 * glm::pi<double>() * uniform01(generator);
 		double phi = acos(1 - 2 * uniform01(generator));
@@ -320,14 +348,21 @@ int main(void)
 		ParticlesContainer[i].g = rand() % 256;
 		ParticlesContainer[i].b = rand() % 256;
 		ParticlesContainer[i].a = 255;
-		ParticlesContainer[i].mass = rand()%260 + 10;
+		ParticlesContainer[i].mass = rand()%26 + 10;
 		ParticlesContainer[i].size = 5;
+
+		// Update GPU buffer with colour positions.
+		g_particule_color_data[4 * i + 0] = ParticlesContainer[i].r;
+		g_particule_color_data[4 * i + 1] = ParticlesContainer[i].g;
+		g_particule_color_data[4 * i + 2] = ParticlesContainer[i].b;
+		g_particule_color_data[4 * i + 3] = ParticlesContainer[i].a;
+
 	}
 		
 	//Put the central mass in
 	ParticlesContainer[0].pos = glm::dvec3(0, 0, 0);
 	ParticlesContainer[0].velocity = glm::dvec3(0, 0, 0);
-	ParticlesContainer[0].mass = 200;
+	ParticlesContainer[0].mass = 1;
 	ParticlesContainer[0].r = 255;
 	ParticlesContainer[0].g = 0;
 	ParticlesContainer[0].b = 0;
