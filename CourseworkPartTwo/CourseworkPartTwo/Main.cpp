@@ -48,9 +48,9 @@ GLuint ViewProjMatrixID;
 struct Particle
 {
 	// Position of the shader.
-	glm::dvec3 pos;
+	glm::vec3 pos;
 	// Force acting on the particle - is reset each update.
-	glm::dvec3 force;
+	glm::vec3 force;
 	// Colour of the particle.
 	unsigned char r, g, b, a; 
 	// Size of the particle - does not represent mass!
@@ -58,23 +58,23 @@ struct Particle
 	// How far away from the camera is it? This is used to sort the particle list on how close it is to camera.
 	float cameradistance; 
 	// Speed and direction of the particle.
-	glm::dvec3 velocity;     
-	double mass;     
+	glm::vec3 velocity;     
+	float mass;     
 
 	// Caclulate the force that another particle is having on this particle.
 	void AddForce(Particle& b)
 	{
 		// Get the distance between the two particles.
-		double dist = glm::distance(pos, b.pos);
+		float dist = glm::distance(pos, b.pos);
 		// Add a condition to prevent Nan - Is there a better approach to this? 
 		if (dist == 0)
 			dist = 0.000001;
-		double F = G * (mass * b.mass / (dist*dist));
+		float F = G * (mass * b.mass / (dist*dist));
 		force += F * (b.pos-pos)/dist;
 	}
 
 	// Update this particle. 
-	void Update(double deltaTime)
+	void Update(float deltaTime)
 	{
 		velocity += (force / mass);
 		pos += deltaTime * velocity;
@@ -144,7 +144,7 @@ void UpdateParticles(double deltaTime)
 		// Update position of particle.
 		p.Update(deltaTime);
 		// calculate camera distance.
-		p.cameradistance = glm::length2(p.pos - glm::dvec3(camera.GetPosition()));
+		p.cameradistance = glm::length2(p.pos - camera.GetPosition());
 		// Update GPU buffer with new positions.
 		g_particule_position_size_data[4 * i + 0] = p.pos.x;
 		g_particule_position_size_data[4 * i + 1] = p.pos.y;
