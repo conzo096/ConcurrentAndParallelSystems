@@ -22,9 +22,9 @@
 #include <thread>
 
 // Number of particles to be generated.
-#define MAXPARTICLES 1500
+#define MAXPARTICLES 500
 // Gravational constant
-#define G 6.673e-2 //6.673e-11;
+#define G 6.673e-6 //6.673e-11;
 
 // Get the number of threads this hardware can support.
 int numThreads = std::thread::hardware_concurrency();
@@ -70,7 +70,7 @@ struct Particle
 		if (dist == 0)
 			dist = 0.000001;
 		float F = G * (mass * b.mass / (dist*dist));
-		force += F * (b.pos-pos)/dist;
+		force += F * glm::normalize(b.pos-pos)/dist;
 	}
 
 	// Update this particle. 
@@ -137,7 +137,7 @@ void SimulateParticles()
 // Calculate the new position of all the particles, depending on the force applied to them.
 void UpdateParticles(double deltaTime)
 {
-	#pragma omp parallel for num_threads(numThreads)  private(i)
+//	#pragma omp parallel for num_threads(numThreads)  private(i)
 	for (int i = 0; i < MAXPARTICLES; i++)
 	{
 		Particle& p = ParticlesContainer[i];
@@ -333,7 +333,7 @@ int main(void)
 
 	
 
-	#pragma omp parallel for num_threads(numThreads)  private(i)
+//	#pragma omp parallel for num_threads(numThreads)  private(i)
 	for (int i = 1; i < MAXPARTICLES; i++)
 	{
 		double theta = 2 * glm::pi<double>() * uniform01(generator);
@@ -348,7 +348,7 @@ int main(void)
 		ParticlesContainer[i].g = rand() % 256;
 		ParticlesContainer[i].b = rand() % 256;
 		ParticlesContainer[i].a = 255;
-		ParticlesContainer[i].mass = rand()%26 + 10;
+		ParticlesContainer[i].mass = rand()%200000 + 10;
 		ParticlesContainer[i].size = 5;
 
 		// Update GPU buffer with colour positions.
@@ -362,7 +362,7 @@ int main(void)
 	//Put the central mass in
 	ParticlesContainer[0].pos = glm::dvec3(0, 0, 0);
 	ParticlesContainer[0].velocity = glm::dvec3(0, 0, 0);
-	ParticlesContainer[0].mass = 1;
+	ParticlesContainer[0].mass = 30000000000000000;
 	ParticlesContainer[0].r = 255;
 	ParticlesContainer[0].g = 0;
 	ParticlesContainer[0].b = 0;
