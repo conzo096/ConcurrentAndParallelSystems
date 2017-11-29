@@ -22,9 +22,11 @@
 #include <thread>
 
 // Number of particles to be generated.
-#define MAXPARTICLES 500
+#define MAXPARTICLES 5000
+
+std::string filePath("ompSimSimulation(5000).csv");
 // Gravational constant
-#define G 6.673e-6 //6.673e-11;
+#define G 6.673e-3 //6.673e-11;
 
 // Get the number of threads this hardware can support.
 int numThreads = std::thread::hardware_concurrency();
@@ -42,7 +44,7 @@ GLuint CameraRight_worldspace_ID;
 GLuint CameraUp_worldspace_ID;
 GLuint ViewProjMatrixID;
 
-
+std::ofstream myfile;
 
 // This class represents the particle.
 struct Particle
@@ -66,11 +68,11 @@ struct Particle
 	{
 		// Get the distance between the two particles.
 		float dist = glm::distance(pos, b.pos);
-		// Add a condition to prevent Nan - Is there a better approach to this? 
+		// Add a softening to prevent nans. 
 		if (dist == 0)
-			dist = 0.000001;
+			dist = 0.0001;
 		float F = G * (mass * b.mass / (dist*dist));
-		force += F * glm::normalize(b.pos-pos)/dist;
+		force += F * (b.pos - pos) / dist;
 	}
 
 	// Update this particle. 
@@ -112,12 +114,60 @@ void SortParticles()
 	std::sort(&ParticlesContainer[0], &ParticlesContainer[MAXPARTICLES]);
 }
 
+// This method is called once to populate the particle with their data.
+// It contains one for loop so it has a linear complexity.
+void LoadParticles()
+{
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+	std::mt19937 generator(seed);
+	std::uniform_real_distribution<double> uniform01(0.0, 1.0);
+
+	double radius = 100;
+	int i;
+	#pragma omp parallel for num_threads(numThreads) private(i)
+	for (i = 1; i < MAXPARTICLES; i++)
+	{
+		double theta = 2 * glm::pi<double>() * uniform01(generator);
+		double phi = acos(1 - 2 * uniform01(generator));
+		double x = sin(phi) * cos(theta) * radius;
+		double y = sin(phi) * sin(theta) * radius;
+		double z = cos(phi) * radius;
+
+		ParticlesContainer[i].pos = glm::dvec3(x, y, z);
+		ParticlesContainer[i].velocity = glm::dvec3(0);
+		ParticlesContainer[i].r = rand() % 256;
+		ParticlesContainer[i].g = rand() % 256;
+		ParticlesContainer[i].b = rand() % 256;
+		ParticlesContainer[i].a = 255;
+		ParticlesContainer[i].mass = rand() % 26 + 10;
+		ParticlesContainer[i].size = 5;
+
+		// Update GPU buffer with colour positions.
+		g_particule_color_data[4 * i + 0] = ParticlesContainer[i].r;
+		g_particule_color_data[4 * i + 1] = ParticlesContainer[i].g;
+		g_particule_color_data[4 * i + 2] = ParticlesContainer[i].b;
+		g_particule_color_data[4 * i + 3] = ParticlesContainer[i].a;
+	}
+
+	//Put the central mass in
+	ParticlesContainer[0].pos = glm::dvec3(0, 0, 0);
+	ParticlesContainer[0].velocity = glm::dvec3(0, 0, 0);
+	ParticlesContainer[0].mass = 10;
+	ParticlesContainer[0].r = 255;
+	ParticlesContainer[0].g = 0;
+	ParticlesContainer[0].b = 0;
+	ParticlesContainer[0].a = 255;
+	ParticlesContainer[0].size = (rand() % 1000) / 2000.0f + 0.1f;
+}
+
 
 // Update each particle, against all other particles in the scene.
+// Contains a nested for loop - O^2. This is the biggest bottleneck in terms of performance.
 void SimulateParticles()
 {
-	//#pragma omp parallel for num_threads(numThreads)  private(i)
-	for (int i = 0; i<MAXPARTICLES; i++)
+	int i;
+	#pragma omp parallel for num_threads(numThreads) private(i)
+	for (i = 0; i<MAXPARTICLES; i++)
 	{
 		// Get particle and reset its current force.
 		Particle& p = ParticlesContainer[i];
@@ -135,10 +185,13 @@ void SimulateParticles()
 
 
 // Calculate the new position of all the particles, depending on the force applied to them.
+// Linear complexity as their is one for loop. 
+// This is independent data and can be updated in parallel without data race concerns.
 void UpdateParticles(double deltaTime)
 {
-//	#pragma omp parallel for num_threads(numThreads)  private(i)
-	for (int i = 0; i < MAXPARTICLES; i++)
+	int i;
+	#pragma omp parallel for num_threads(numThreads) private(i)
+	for (i = 0; i < MAXPARTICLES; i++)
 	{
 		Particle& p = ParticlesContainer[i];
 		// Update position of particle.
@@ -151,20 +204,21 @@ void UpdateParticles(double deltaTime)
 		g_particule_position_size_data[4 * i + 2] = p.pos.z;
 		g_particule_position_size_data[4 * i + 3] = p.size;
 
-		//// Update GPU buffer with colour positions.
-		//g_particule_color_data[4 * i + 0] = p.r;
-		//g_particule_color_data[4 * i + 1] = p.g;
-		//g_particule_color_data[4 * i + 2] = p.b;
-		//g_particule_color_data[4 * i + 3] = p.a;
+		// Update GPU buffer with colour positions.
+		g_particule_color_data[4 * i + 0] = p.r;
+		g_particule_color_data[4 * i + 1] = p.g;
+		g_particule_color_data[4 * i + 2] = p.b;
+		g_particule_color_data[4 * i + 3] = p.a;
 
 	}
 }
 
+
+// Update the entire project by deltatime. Has two of the N-Body methods contained within it.
 void Update(double deltaTime)
 {
 	float ratio_width = glm::quarter_pi<float>() / static_cast<float>(1920);
 	float ratio_height = glm::quarter_pi<float>() / static_cast<float>(1080);
-
 	double xpos, ypos;
 	glfwGetCursorPos(window, &xpos, &ypos);
 	glfwSetCursorPos(window, 1920.0 / 2, 1080.0 / 2);
@@ -177,16 +231,24 @@ void Update(double deltaTime)
 	camera.Rotate(static_cast<float>(delta_x), static_cast<float>(-delta_y)); // flipped y to revert the invert.
 	camera.Update(deltaTime);
 	
-
 	// Handle N-Body simulation segment.
+	//auto start = std::chrono::steady_clock::now();
+	auto t = clock();
 	SimulateParticles();
+	t = clock() - t;
+	//auto end = std::chrono::steady_clock::now();
+	//auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+//	myfile << elapsed.count() << std::endl;
+	myfile << (float)t/CLOCKS_PER_SEC << std::endl;
+
 	UpdateParticles(deltaTime);
 }
 
 
+// Render the particle simulation - this is not part of the N-body simulation.
 void Render()
 {
-	//SortParticles();
+	SortParticles();
 
 	// Update the OpenGL buffers with updated particle positions.
 	glBindBuffer(GL_ARRAY_BUFFER, particles_position_buffer);
@@ -248,6 +310,9 @@ void Render()
 
 int main(void)
 {
+	myfile.open(filePath);
+
+
 	// Initialise GLFW
 	if (!glfwInit())
 	{
@@ -323,51 +388,10 @@ int main(void)
 	ViewProjMatrixID = glGetUniformLocation(shader.GetId(), "VP");
 
 	double lastTime = glfwGetTime();
-
-	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-	std::mt19937 generator(seed);
-	std::uniform_real_distribution<double> uniform01(0.0, 1.0);
-
-	double radius = 100;        // radius of universe
-	//double solarmass = 100;
-
 	
+	// Load initial particle state.
+	LoadParticles();
 
-//	#pragma omp parallel for num_threads(numThreads)  private(i)
-	for (int i = 1; i < MAXPARTICLES; i++)
-	{
-		double theta = 2 * glm::pi<double>() * uniform01(generator);
-		double phi = acos(1 - 2 * uniform01(generator));
-		double x = sin(phi) * cos(theta) * radius;
-		double y = sin(phi) * sin(theta) * radius;
-		double z = cos(phi) * radius;
-		
-		ParticlesContainer[i].pos = glm::dvec3(x,y,z) ;
-		ParticlesContainer[i].velocity = glm::dvec3(0);
-		ParticlesContainer[i].r = rand() % 256;
-		ParticlesContainer[i].g = rand() % 256;
-		ParticlesContainer[i].b = rand() % 256;
-		ParticlesContainer[i].a = 255;
-		ParticlesContainer[i].mass = rand()%200000 + 10;
-		ParticlesContainer[i].size = 5;
-
-		// Update GPU buffer with colour positions.
-		g_particule_color_data[4 * i + 0] = ParticlesContainer[i].r;
-		g_particule_color_data[4 * i + 1] = ParticlesContainer[i].g;
-		g_particule_color_data[4 * i + 2] = ParticlesContainer[i].b;
-		g_particule_color_data[4 * i + 3] = ParticlesContainer[i].a;
-
-	}
-		
-	//Put the central mass in
-	ParticlesContainer[0].pos = glm::dvec3(0, 0, 0);
-	ParticlesContainer[0].velocity = glm::dvec3(0, 0, 0);
-	ParticlesContainer[0].mass = 30000000000000000;
-	ParticlesContainer[0].r = 255;
-	ParticlesContainer[0].g = 0;
-	ParticlesContainer[0].b = 0;
-	ParticlesContainer[0].a = 255;
-	ParticlesContainer[0].size = (rand() % 1000) / 2000.0f + 0.1f;
 	tex = Texture("circle.png");
 
 	//camera.SetPosition(ParticlesContainer[0].pos);
@@ -423,6 +447,7 @@ int main(void)
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
+	myfile.close();
 
 	return 0;
 }
