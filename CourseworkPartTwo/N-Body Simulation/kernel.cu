@@ -724,6 +724,14 @@ __global__ void SimulateParticlesGPU(Particle* particles, int numParticles)
 	}
 }
 
+//Updates particles based on their total force.
+__global__ void UpdateParticlesGPU(Particle* particles,float deltaTime)
+{
+	unsigned int j = blockIdx.x*blockDim.x + threadIdx.x;
+	particles[j].velocity += (particles[j].force / particles[j].mass);
+	particles[j].pos += deltaTime * particles[j].velocity;
+}
+
 
 
 
@@ -815,11 +823,20 @@ void Update(double deltaTime)
 
 
 	cudaMemcpy(&buffer_particles[0],ParticlesContainer, data_size, cudaMemcpyHostToDevice);
-	SimulateParticlesGPU << <2,MAXPARTICLES/2>> >(buffer_particles,MAXPARTICLES);
+	SimulateParticlesGPU <<<2,MAXPARTICLES/2>>>(buffer_particles,MAXPARTICLES);
+	UpdateParticlesGPU <<<2, MAXPARTICLES/2>>>(buffer_particles, deltaTime);
 	cudaDeviceSynchronize();
 	// Copy required data back to their buffers.
 	cudaMemcpy(&ParticlesContainer[0], buffer_particles, data_size, cudaMemcpyDeviceToHost);
-	UpdateParticles(deltaTime);
+	//UpdateParticles(deltaTime);
+	// Now for each particle, update their position and velocity.
+	for (int i = 0; i < MAXPARTICLES; i++)
+	{
+		g_particule_position_size_data[4 * i + 0] = ParticlesContainer[i].pos.x;
+		g_particule_position_size_data[4 * i + 1] = ParticlesContainer[i].pos.y;
+		g_particule_position_size_data[4 * i + 2] = ParticlesContainer[i].pos.z;
+		g_particule_position_size_data[4 * i + 3] = ParticlesContainer[i].size;
+	}
 }
 
 
