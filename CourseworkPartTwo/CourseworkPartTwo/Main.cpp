@@ -24,7 +24,7 @@
 // Number of particles to be generated.
 #define MAXPARTICLES 5000
 
-std::string filePath("ompSimSimulation(5000).csv");
+std::string filePath("seqUpd(5000).csv");
 // Gravational constant
 #define G 6.673e-3 //6.673e-11;
 
@@ -189,28 +189,34 @@ void SimulateParticles()
 // This is independent data and can be updated in parallel without data race concerns.
 void UpdateParticles(double deltaTime)
 {
-	int i;
-	#pragma omp parallel for num_threads(numThreads) private(i)
-	for (i = 0; i < MAXPARTICLES; i++)
+	auto t = clock();
+	for (int k = 0; k < 1000; k++)
 	{
-		Particle& p = ParticlesContainer[i];
-		// Update position of particle.
-		p.Update(deltaTime);
-		// calculate camera distance.
-		p.cameradistance = glm::length2(p.pos - camera.GetPosition());
-		// Update GPU buffer with new positions.
-		g_particule_position_size_data[4 * i + 0] = p.pos.x;
-		g_particule_position_size_data[4 * i + 1] = p.pos.y;
-		g_particule_position_size_data[4 * i + 2] = p.pos.z;
-		g_particule_position_size_data[4 * i + 3] = p.size;
+		int i;
+		//#pragma omp parallel for num_threads(numThreads) private(i)
+		for (i = 0; i < MAXPARTICLES; i++)
+		{
+			Particle& p = ParticlesContainer[i];
+			// Update position of particle.
+			p.Update(deltaTime);
+			// calculate camera distance.
+			p.cameradistance = glm::length2(p.pos - camera.GetPosition());
+			// Update GPU buffer with new positions.
+			g_particule_position_size_data[4 * i + 0] = p.pos.x;
+			g_particule_position_size_data[4 * i + 1] = p.pos.y;
+			g_particule_position_size_data[4 * i + 2] = p.pos.z;
+			g_particule_position_size_data[4 * i + 3] = p.size;
 
-		// Update GPU buffer with colour positions.
-		g_particule_color_data[4 * i + 0] = p.r;
-		g_particule_color_data[4 * i + 1] = p.g;
-		g_particule_color_data[4 * i + 2] = p.b;
-		g_particule_color_data[4 * i + 3] = p.a;
+			// Update GPU buffer with colour positions.
+			g_particule_color_data[4 * i + 0] = p.r;
+			g_particule_color_data[4 * i + 1] = p.g;
+			g_particule_color_data[4 * i + 2] = p.b;
+			g_particule_color_data[4 * i + 3] = p.a;
 
+		}
 	}
+	t = clock() - t;
+	myfile << (float)t / CLOCKS_PER_SEC << std::endl;
 }
 
 
@@ -232,15 +238,7 @@ void Update(double deltaTime)
 	camera.Update(deltaTime);
 	
 	// Handle N-Body simulation segment.
-	//auto start = std::chrono::steady_clock::now();
-	auto t = clock();
 	SimulateParticles();
-	t = clock() - t;
-	//auto end = std::chrono::steady_clock::now();
-	//auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-//	myfile << elapsed.count() << std::endl;
-	myfile << (float)t/CLOCKS_PER_SEC << std::endl;
-
 	UpdateParticles(deltaTime);
 }
 

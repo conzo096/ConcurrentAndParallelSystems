@@ -26,8 +26,9 @@
 #include <curand_kernel.h>
 
 // Number of particles to be generated.
-#define MAXPARTICLES 5000
-std::string filePath("CudaSeq5000.csv");
+#define MAXPARTICLES 10000
+#define THREADSPERBLOCK 64
+std::string filePath("CudaUpd1000.csv");
 // Gravational constant
 #define G 6.673e-3 //6.673e-11;
 
@@ -46,7 +47,7 @@ GLuint CameraRight_worldspace_ID;
 GLuint CameraUp_worldspace_ID;
 GLuint ViewProjMatrixID;
 
-
+int nBlocks = (MAXPARTICLES + THREADSPERBLOCK - 1) / THREADSPERBLOCK;
 
 void cuda_info()
 {
@@ -299,18 +300,9 @@ void Update(double deltaTime)
 	delta_y *= ratio_height;
 	camera.Rotate(static_cast<float>(delta_x), static_cast<float>(-delta_y)); // flipped y to revert the invert.
 	camera.Update(deltaTime);
-
-
-//	auto start = std::chrono::steady_clock::now();
-	auto t = clock();
-	SimulateParticlesGPU <<<8,MAXPARTICLES/8>>>(buffer_particles,MAXPARTICLES);
-	t = clock() - t;
+	SimulateParticlesGPU << <nBlocks, THREADSPERBLOCK >> > (buffer_particles, MAXPARTICLES);
 	cudaDeviceSynchronize();
-	myfile << (float)t / CLOCKS_PER_SEC << std::endl;
-//	auto end = std::chrono::steady_clock::now();
-//	auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-//	myfile << elapsed.count() << std::endl;
-	UpdateParticlesGPU <<<4, MAXPARTICLES/4>>>(buffer_particles, deltaTime);
+	UpdateParticlesGPU << <nBlocks, THREADSPERBLOCK >> >(buffer_particles, deltaTime);
 	cudaDeviceSynchronize();
 	// Copy required data back to their buffers.
 	cudaMemcpy(&ParticlesContainer[0], buffer_particles, data_size, cudaMemcpyDeviceToHost);
