@@ -29,7 +29,7 @@ std::string filePath("ompload(500).csv");
 #define G 6.673e-3 //6.673e-11;
 
 // Get the number of threads this hardware can support.
-int numThreads = std::thread::hardware_concurrency();
+int numThreads = 1;// std::thread::hardware_concurrency();
 
 // Texture to make the particle a round shape.
 Texture tex;

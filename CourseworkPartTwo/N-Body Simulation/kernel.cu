@@ -199,17 +199,18 @@ __global__ void SimulateParticlesGPU(Particle* particles, int numParticles)
 {
 	//unsigned int i = blockIdx.y*blockDim.y + threadIdx.y;
 	unsigned int j = blockIdx.x*blockDim.x + threadIdx.x;
+	for(int k=j; k < j+numParticles;k++)
 	for (int i = 0; i<numParticles; i++)
 	{
-		if (i != j)
+		if (k != j)
 		{
 			// Get the distance between the two particles.
-			float dist = glm::distance(particles[j].pos, particles[i].pos);
+			float dist = glm::distance(particles[j].pos, particles[k].pos);
 			// Add a condition to prevent Nan - Is there a better approach to this? 
-			if (dist < particles[i].size*particles[j].size)
-				dist = particles[i].size*particles[j].size;
-			float F = G * (particles[j].mass * particles[i].mass / (dist*dist));
-			particles[j].force += F * (particles[i].pos - particles[j].pos) / dist;
+			if (dist < particles[k].size*particles[j].size)
+				dist = particles[k].size*particles[j].size;
+			float F = G * (particles[j].mass * particles[k].mass / (dist*dist));
+			particles[j].force += F * (particles[k].pos - particles[j].pos) / dist;
 		}
 	}
 }
@@ -218,10 +219,13 @@ __global__ void SimulateParticlesGPU(Particle* particles, int numParticles)
 __global__ void UpdateParticlesGPU(Particle* particles, float deltaTime, glm::vec3 cam)
 {
 	unsigned int j = blockIdx.x*blockDim.x + threadIdx.x;
-	particles[j].velocity += (particles[j].force / particles[j].mass);
-	particles[j].pos += deltaTime * particles[j].velocity;
-	particles[j].force = glm::dvec3(0);
-	particles[j].cameradistance = glm::length2(particles[j].pos - cam);
+	for(int i=j; i < j+numParticles;i++)
+	{
+		particles[i].velocity += (particles[i].force / particles[i].mass);
+		particles[i].pos += deltaTime * particles[i].velocity;
+		particles[i].force = glm::dvec3(0);
+		particles[i].cameradistance = glm::length2(particles[i].pos - cam);
+	}
 }
 
 
@@ -268,9 +272,9 @@ void Update(double deltaTime)
 	delta_y *= ratio_height;
 	camera.Rotate(static_cast<float>(delta_x), static_cast<float>(-delta_y)); // flipped y to revert the invert.
 	camera.Update(deltaTime);
-	SimulateParticlesGPU << <nBlocks, THREADSPERBLOCK >> > (buffer_particles, MAXPARTICLES);
+	SimulateParticlesGPU << <1,1 >> > (buffer_particles, MAXPARTICLES);
 	cudaDeviceSynchronize();
-	UpdateParticlesGPU << <nBlocks, THREADSPERBLOCK >> >(buffer_particles, deltaTime,camera.GetPosition());
+	UpdateParticlesGPU << <1,1 >> >(buffer_particles, deltaTime,camera.GetPosition());
 	cudaDeviceSynchronize();
 	// Copy required data back to their buffers.
 	cudaMemcpy(&ParticlesContainer[0], buffer_particles, data_size, cudaMemcpyDeviceToHost);
