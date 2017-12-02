@@ -238,49 +238,7 @@ void SortParticles()
 
 // Load the particles with their initial data.
 void LoadParticles()
-{
-	//unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-	//std::mt19937 generator(seed);
-	//std::uniform_real_distribution<double> uniform01(0.0, 1.0);
-
-	//double radius = 100;
-	//int i;
-	//#pragma omp parallel for num_threads(numThreads) private(i)
-	//for (i = 1; i < MAXPARTICLES; i++)
-	//{
-	//	double theta = 2 * glm::pi<double>() * uniform01(generator);
-	//	double phi = acos(1 - 2 * uniform01(generator));
-	//	double x = sin(phi) * cos(theta) * radius;
-	//	double y = sin(phi) * sin(theta) * radius;
-	//	double z = cos(phi) * radius;
-
-	//	ParticlesContainer[i].pos = glm::dvec3(x, y, z);
-	//	ParticlesContainer[i].velocity = glm::dvec3(0);
-	//	ParticlesContainer[i].r = rand() % 256;
-	//	ParticlesContainer[i].g = rand() % 256;
-	//	ParticlesContainer[i].b = rand() % 256;
-	//	ParticlesContainer[i].a = 255;
-	//	ParticlesContainer[i].mass = rand() % 26 + 10;
-	//	ParticlesContainer[i].size = 5;
-
-	//	// Update GPU buffer with colour positions.
-	//	g_particule_color_data[4 * i + 0] = ParticlesContainer[i].r;
-	//	g_particule_color_data[4 * i + 1] = ParticlesContainer[i].g;
-	//	g_particule_color_data[4 * i + 2] = ParticlesContainer[i].b;
-	//	g_particule_color_data[4 * i + 3] = ParticlesContainer[i].a;
-	//}
-
-	////Put the central mass in
-	//ParticlesContainer[0].pos = glm::dvec3(0, 0, 0);
-	//ParticlesContainer[0].velocity = glm::dvec3(0, 0, 0);
-	//ParticlesContainer[0].mass = 1;
-	//ParticlesContainer[0].r = 255;
-	//ParticlesContainer[0].g = 0;
-	//ParticlesContainer[0].b = 0;
-	//ParticlesContainer[0].a = 255;
-	//ParticlesContainer[0].size = (rand() % 1000) / 2000.0f + 0.1f;
-	
-	
+{	
 	// Configuring CUDA.
 	cudaSetDevice(0);
 	//cuda_info();
@@ -291,65 +249,6 @@ void LoadParticles()
 	// Update particles on gpu.
 	LoadParticlesGPU << <nBlocks, THREADSPERBLOCK >> > (buffer_particles, 100, MAXPARTICLES);
 	cudaDeviceSynchronize();
-
-}
-
-
-// Update each particle, against all other particles in the scene.
-void SimulateParticles()
-{
-	int i;
-	#pragma omp parallel for num_threads(numThreads)  private(i)
-	for (i = 0; i<MAXPARTICLES; i++)
-	{
-		// Get particle and reset its current force.
-		Particle& p = ParticlesContainer[i];
-		p.ResetForce();
-		for (int j = 0; j < MAXPARTICLES; j++)
-		{
-			// Update particle as long as it is not itself.
-			if (i != j)
-			{
-				p.AddForce(ParticlesContainer[j]);
-			}
-		}
-	}
-}
-
-
-// Calculate the new position of all the particles, depending on the force applied to them.
-void UpdateParticles(double deltaTime)
-{
-	//	#pragma omp parallel for num_threads(numThreads)  private(i)
-	for (int i = 0; i < MAXPARTICLES; i++)
-	{
-		Particle& p = ParticlesContainer[i];
-		// Update position of particle.
-		p.Update(deltaTime);
-		// calculate camera distance.
-		p.cameradistance = glm::length2(p.pos - camera.GetPosition());
-		// Update GPU buffer with new positions.
-		g_particule_position_size_data[4 * i + 0] = p.pos.x;
-		g_particule_position_size_data[4 * i + 1] = p.pos.y;
-		g_particule_position_size_data[4 * i + 2] = p.pos.z;
-		g_particule_position_size_data[4 * i + 3] = p.size;
-
-		//// Update GPU buffer with colour positions.
-		//g_particule_color_data[4 * i + 0] = p.r;
-		//g_particule_color_data[4 * i + 1] = p.g;
-		//g_particule_color_data[4 * i + 2] = p.b;
-		//g_particule_color_data[4 * i + 3] = p.a;
-
-	}
-
-	// Now for each particle, update their position and velocity.
-	for (int i = 0; i < MAXPARTICLES; i++)
-	{
-		g_particule_position_size_data[4 * i + 0] = ParticlesContainer[i].pos.x;
-		g_particule_position_size_data[4 * i + 1] = ParticlesContainer[i].pos.y;
-		g_particule_position_size_data[4 * i + 2] = ParticlesContainer[i].pos.z;
-		g_particule_position_size_data[4 * i + 3] = ParticlesContainer[i].size;
-	}
 }
 
 
@@ -375,7 +274,6 @@ void Update(double deltaTime)
 	cudaDeviceSynchronize();
 	// Copy required data back to their buffers.
 	cudaMemcpy(&ParticlesContainer[0], buffer_particles, data_size, cudaMemcpyDeviceToHost);
-
 	SortParticles();
 	// Now for each particle, update their position and velocity.
 	for (int i = 0; i < MAXPARTICLES; i++)
@@ -534,7 +432,7 @@ int main(void)
 	ViewProjMatrixID = glGetUniformLocation(shader.GetId(), "VP");
 	LoadParticles();
 	tex = Texture("circle.png");
-
+	double lastTime = glfwGetTime();
 	// The VBO containing the 4 vertices of the particles.
 	// Thanks to instancing, they will be shared by all particles.
 	static const GLfloat g_vertex_buffer_data[] =

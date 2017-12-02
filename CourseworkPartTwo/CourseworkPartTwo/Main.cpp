@@ -22,7 +22,7 @@
 #include <thread>
 
 // Number of particles to be generated.
-#define MAXPARTICLES 500
+#define MAXPARTICLES 10000
 
 std::string filePath("ompload(500).csv");
 // Gravational constant
