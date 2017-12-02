@@ -28,7 +28,7 @@
 // Number of particles to be generated.
 #define MAXPARTICLES 10000
 #define THREADSPERBLOCK 64
-std::string filePath("CudaUpd1000.csv");
+std::string filePath("Cudaload10000.csv");
 // Gravational constant
 #define G 6.673e-3 //6.673e-11;
 
@@ -124,25 +124,25 @@ Particle *buffer_particles;
 auto data_size = sizeof(Particle) * MAXPARTICLES;
 
 std::ofstream myfile;
-__device__ void random(float* result, int MAX,int) {
+__device__ void random(float* result, int MAX,int i) {
 	/* CUDA's random number library uses curandState_t to keep track of the seed value
 	we will store a random state for every thread  */
 	curandState_t state;
 
 	/* we have to initialize the state */
-	curand_init(0, /* the seed controls the sequence of random values that are produced */
-		0, /* the sequence number is only important with multiple cores */
+	curand_init(i, /* the seed controls the sequence of random values that are produced */
+		blockIdx.x, /* the sequence number is only important with multiple cores */
 		0, /* the offset is how much extra we advance in the sequence for each call, can be 0 */
 		&state);
 
 	/* curand works like rand - except that it takes a state as a parameter */
-	*result = curand(&state) % MAX;
+	*result = curand_uniform(&state);
 }
 
 __device__ void random(double* result)
 {
 	curandState_t state;
-	curand_init(0,0, 0, &state);
+	curand_init(0, blockIdx.x, 0, &state);
 	/* curand works like rand - except that it takes a state as a parameter */
 	*result = curand(&state);
 }
@@ -152,8 +152,8 @@ __device__ void random(unsigned char* result, int MAX,int i) {
 	curandState_t state;
 
 	/* we have to initialize the state */
-	curand_init(i, /* the seed controls the sequence of random values that are produced */
-		0, /* the sequence number is only important with multiple cores */
+	curand_init(0, /* the seed controls the sequence of random values that are produced */
+		blockIdx.x, /* the sequence number is only important with multiple cores */
 		0, /* the offset is how much extra we advance in the sequence for each call, can be 0 */
 		&state);
 
@@ -165,19 +165,30 @@ __global__ void LoadParticlesGPU(Particle* particles, int radius,int numParticle
 {
 	unsigned int i = blockIdx.x*blockDim.x + threadIdx.x;
 
-	float x = (i* (numParticles/radius));
-	float y = (i + (numParticles / radius));
-	float z = (i * (numParticles / radius));
+	float temp;
+	random(&temp, 1, i);
+	double theta = 2 * glm::pi<double>() * temp;
+	random(&temp, 1, blockIdx.x);
+	double phi = acos(1 - 2 * temp);
+	double a = sin(phi) * cos(theta) * radius;
+	double b = sin(phi) * sin(theta) * radius;
+	double c = cos(phi) * radius;
 
-	particles[i].pos = glm::vec3(x,y,z);
+	//float x = (i%radius * (numParticles/radius));
+	//float y = (i%radius + (numParticles / radius));
+	//float z = (i%radius + (numParticles / radius));
+	
+//	random(&temp, radius, i);
+	particles[i].pos = glm::vec3(a,b,c);
 	particles[i].velocity = glm::dvec3(0);
-	random(&particles[i].r, 256,i);
-	random(&particles[i].g, 256, i);
-	random(&particles[i].b, 256, i);
-	particles[i].a = 1;
-	random(&particles[i].mass, 26,i);
+	random(&particles[i].r, 256,a);
+	random(&particles[i].g, 256, b);
+	random(&particles[i].b, 256, c);
+	particles[i].a = 255;
 
-	particles[i].mass =10;
+	random(&temp, 26,(float)a);
+	temp += 10;
+	particles[i].mass = temp;
 	particles[i].size = 5;
 
 
@@ -204,15 +215,14 @@ __global__ void SimulateParticlesGPU(Particle* particles, int numParticles)
 }
 
 //Updates particles based on their total force.
-__global__ void UpdateParticlesGPU(Particle* particles,float deltaTime)
+__global__ void UpdateParticlesGPU(Particle* particles, float deltaTime, glm::vec3 cam)
 {
 	unsigned int j = blockIdx.x*blockDim.x + threadIdx.x;
 	particles[j].velocity += (particles[j].force / particles[j].mass);
 	particles[j].pos += deltaTime * particles[j].velocity;
 	particles[j].force = glm::dvec3(0);
+	particles[j].cameradistance = glm::length2(particles[j].pos - cam);
 }
-
-
 
 
 // Sort the particle order by closest to camera.
@@ -223,6 +233,65 @@ void SortParticles()
 		ParticlesContainer[i].cameradistance = glm::distance(camera.GetPosition(), ParticlesContainer[i].pos);
 	}
 	std::sort(&ParticlesContainer[0], &ParticlesContainer[MAXPARTICLES]);
+}
+
+
+// Load the particles with their initial data.
+void LoadParticles()
+{
+	//unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+	//std::mt19937 generator(seed);
+	//std::uniform_real_distribution<double> uniform01(0.0, 1.0);
+
+	//double radius = 100;
+	//int i;
+	//#pragma omp parallel for num_threads(numThreads) private(i)
+	//for (i = 1; i < MAXPARTICLES; i++)
+	//{
+	//	double theta = 2 * glm::pi<double>() * uniform01(generator);
+	//	double phi = acos(1 - 2 * uniform01(generator));
+	//	double x = sin(phi) * cos(theta) * radius;
+	//	double y = sin(phi) * sin(theta) * radius;
+	//	double z = cos(phi) * radius;
+
+	//	ParticlesContainer[i].pos = glm::dvec3(x, y, z);
+	//	ParticlesContainer[i].velocity = glm::dvec3(0);
+	//	ParticlesContainer[i].r = rand() % 256;
+	//	ParticlesContainer[i].g = rand() % 256;
+	//	ParticlesContainer[i].b = rand() % 256;
+	//	ParticlesContainer[i].a = 255;
+	//	ParticlesContainer[i].mass = rand() % 26 + 10;
+	//	ParticlesContainer[i].size = 5;
+
+	//	// Update GPU buffer with colour positions.
+	//	g_particule_color_data[4 * i + 0] = ParticlesContainer[i].r;
+	//	g_particule_color_data[4 * i + 1] = ParticlesContainer[i].g;
+	//	g_particule_color_data[4 * i + 2] = ParticlesContainer[i].b;
+	//	g_particule_color_data[4 * i + 3] = ParticlesContainer[i].a;
+	//}
+
+	////Put the central mass in
+	//ParticlesContainer[0].pos = glm::dvec3(0, 0, 0);
+	//ParticlesContainer[0].velocity = glm::dvec3(0, 0, 0);
+	//ParticlesContainer[0].mass = 1;
+	//ParticlesContainer[0].r = 255;
+	//ParticlesContainer[0].g = 0;
+	//ParticlesContainer[0].b = 0;
+	//ParticlesContainer[0].a = 255;
+	//ParticlesContainer[0].size = (rand() % 1000) / 2000.0f + 0.1f;
+	
+	
+	// Configuring CUDA.
+	cudaSetDevice(0);
+	//cuda_info();
+	// Create host memory.
+	cudaMalloc((void**)&buffer_particles, data_size);
+	// Send data to GPU.
+	cudaMemcpy(buffer_particles, &ParticlesContainer[0], data_size, cudaMemcpyHostToDevice);
+	// Update particles on gpu.
+	LoadParticlesGPU << <nBlocks, THREADSPERBLOCK >> > (buffer_particles, 100, MAXPARTICLES);
+	cudaDeviceSynchronize();
+
 }
 
 
@@ -302,16 +371,16 @@ void Update(double deltaTime)
 	camera.Update(deltaTime);
 	SimulateParticlesGPU << <nBlocks, THREADSPERBLOCK >> > (buffer_particles, MAXPARTICLES);
 	cudaDeviceSynchronize();
-	UpdateParticlesGPU << <nBlocks, THREADSPERBLOCK >> >(buffer_particles, deltaTime);
+	UpdateParticlesGPU << <nBlocks, THREADSPERBLOCK >> >(buffer_particles, deltaTime,camera.GetPosition());
 	cudaDeviceSynchronize();
 	// Copy required data back to their buffers.
 	cudaMemcpy(&ParticlesContainer[0], buffer_particles, data_size, cudaMemcpyDeviceToHost);
-	//UpdateParticles(deltaTime);
 
 	SortParticles();
 	// Now for each particle, update their position and velocity.
 	for (int i = 0; i < MAXPARTICLES; i++)
 	{
+		//std::cout << ParticlesContainer[i].pos.x << ", " << ParticlesContainer[i].pos.y << ", " << ParticlesContainer[i].pos.z << ", " << std::endl;
 		g_particule_position_size_data[4 * i + 0] = ParticlesContainer[i].pos.x;
 		g_particule_position_size_data[4 * i + 1] = ParticlesContainer[i].pos.y;
 		g_particule_position_size_data[4 * i + 2] = ParticlesContainer[i].pos.z;
@@ -463,63 +532,9 @@ int main(void)
 	CameraRight_worldspace_ID = glGetUniformLocation(shader.GetId(), "CameraRight_worldspace");
 	CameraUp_worldspace_ID = glGetUniformLocation(shader.GetId(), "CameraUp_worldspace");
 	ViewProjMatrixID = glGetUniformLocation(shader.GetId(), "VP");
-
-	double lastTime = glfwGetTime();
-
-	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-	std::mt19937 generator(seed);
-	std::uniform_real_distribution<double> uniform01(0.0, 1.0);
-
-	double radius = 100;        
-	int i;
-	#pragma omp parallel for num_threads(numThreads) private(i)
-	for (i = 1; i < MAXPARTICLES; i++)
-	{
-		double theta = 2 * glm::pi<double>() * uniform01(generator);
-		double phi = acos(1 - 2 * uniform01(generator));
-		double x = sin(phi) * cos(theta) * radius;
-		double y = sin(phi) * sin(theta) * radius;
-		double z = cos(phi) * radius;
-
-		ParticlesContainer[i].pos = glm::dvec3(x, y, z);
-		ParticlesContainer[i].velocity = glm::dvec3(0);
-		ParticlesContainer[i].r = rand() % 256;
-		ParticlesContainer[i].g = rand() % 256;
-		ParticlesContainer[i].b = rand() % 256;
-		ParticlesContainer[i].a = 255;
-		ParticlesContainer[i].mass = rand() % 26 + 10;
-		ParticlesContainer[i].size = 5;
-
-		// Update GPU buffer with colour positions.
-		g_particule_color_data[4 * i + 0] = ParticlesContainer[i].r;
-		g_particule_color_data[4 * i + 1] = ParticlesContainer[i].g;
-		g_particule_color_data[4 * i + 2] = ParticlesContainer[i].b;
-		g_particule_color_data[4 * i + 3] = ParticlesContainer[i].a;
-	}
-
-	//Put the central mass in
-	ParticlesContainer[0].pos = glm::dvec3(0, 0, 0);
-	ParticlesContainer[0].velocity = glm::dvec3(0, 0, 0);
-	ParticlesContainer[0].mass = 1;
-	ParticlesContainer[0].r = 255;
-	ParticlesContainer[0].g = 0;
-	ParticlesContainer[0].b = 0;
-	ParticlesContainer[0].a = 255;
-	ParticlesContainer[0].size = (rand() % 1000) / 2000.0f + 0.1f;
-
+	LoadParticles();
 	tex = Texture("circle.png");
 
-	// Configuring CUDA.
-	cudaSetDevice(0);
-	cuda_info();
-	// Create host memory.
-	cudaMalloc((void**)&buffer_particles, data_size);
-	
-	// Send data to GPU.
-	cudaMemcpy(buffer_particles, &ParticlesContainer[0], data_size, cudaMemcpyHostToDevice);
-	//LoadParticlesGPU<<<2, MAXPARTICLES / 2 >>>(buffer_particles, radius, MAXPARTICLES);
-	//cudaDeviceSynchronize();
-	//cudaMemcpy(ParticlesContainer, &buffer_particles[0], data_size, cudaMemcpyDeviceToHost);
 	// The VBO containing the 4 vertices of the particles.
 	// Thanks to instancing, they will be shared by all particles.
 	static const GLfloat g_vertex_buffer_data[] =
