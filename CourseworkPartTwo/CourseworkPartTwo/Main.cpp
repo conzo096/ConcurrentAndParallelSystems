@@ -22,9 +22,9 @@
 #include <thread>
 
 // Number of particles to be generated.
-#define MAXPARTICLES 10000
+#define MAXPARTICLES 4096
 
-std::string filePath("ompload(500).csv");
+std::string filePath("ompInit(4096).csv");
 // Gravational constant
 #define G 6.673e-3 //6.673e-11;
 
@@ -118,7 +118,8 @@ void SortParticles()
 // It contains one for loop so it has a linear complexity.
 void LoadParticles()
 {
-	for (int k = 0; k < 1000; k++)
+	myfile << "Loading: " << std::endl;
+	for (int k = 0; k < 5; k++)
 	{
 		auto t = clock();
 		for (int l = 0; l < 1000; l++)
@@ -164,9 +165,8 @@ void LoadParticles()
 			ParticlesContainer[0].a = 255;
 			ParticlesContainer[0].size = (rand() % 1000) / 2000.0f + 0.1f;
 		}
-	
 		t = clock() - t;
-		myfile << (float)t / CLOCKS_PER_SEC << std::endl;
+		myfile << (float)t / CLOCKS_PER_SEC << ",";
 	}
 
 }
@@ -176,21 +176,31 @@ void LoadParticles()
 // Contains a nested for loop - O^2. This is the biggest bottleneck in terms of performance.
 void SimulateParticles()
 {
-	int i;
-	#pragma omp parallel for num_threads(numThreads) private(i)
-	for (i = 0; i<MAXPARTICLES; i++)
+	myfile << std::endl << "Simulate: " << std::endl;
+	for (int z = 0; z < 5; z++)
 	{
-		// Get particle and reset its current force.
-		Particle& p = ParticlesContainer[i];
-		p.ResetForce();
-		for (int j = 0; j < MAXPARTICLES; j++)
+		auto t = clock();
+		for (int l = 0; l < 1000; l++)
 		{
-			// Update particle as long as it is not itself.
-			if (i != j)
+			int i;
+			#pragma omp parallel for num_threads(numThreads) private(i)
+			for (i = 0; i < MAXPARTICLES; i++)
 			{
-				p.AddForce(ParticlesContainer[j]);
+				// Get particle and reset its current force.
+				Particle& p = ParticlesContainer[i];
+				p.ResetForce();
+				for (int j = 0; j < MAXPARTICLES; j++)
+				{
+					// Update particle as long as it is not itself.
+					if (i != j)
+					{
+						p.AddForce(ParticlesContainer[j]);
+					}
+				}
 			}
 		}
+		t = clock() - t;
+		myfile << (float)t / CLOCKS_PER_SEC << ",";
 	}
 }
 
@@ -200,28 +210,38 @@ void SimulateParticles()
 // This is independent data and can be updated in parallel without data race concerns.
 void UpdateParticles(double deltaTime)
 {
-	int i;
-	//#pragma omp parallel for num_threads(numThreads) private(i)
-	for (i = 0; i < MAXPARTICLES; i++)
+	myfile << std::endl << "Updating: " << std::endl;
+	for (int z = 0; z < 5; z++)
 	{
-		Particle& p = ParticlesContainer[i];
-		// Update position of particle.
-		p.Update(deltaTime);
-		// calculate camera distance.
-		p.cameradistance = glm::length2(p.pos - camera.GetPosition());
-		// Update GPU buffer with new positions.
-		g_particule_position_size_data[4 * i + 0] = p.pos.x;
-		g_particule_position_size_data[4 * i + 1] = p.pos.y;
-		g_particule_position_size_data[4 * i + 2] = p.pos.z;
-		g_particule_position_size_data[4 * i + 3] = p.size;
+		auto t = clock();
+		for (int l = 0; l < 1000; l++)
+		{
+			int i;
+			#pragma omp parallel for num_threads(numThreads) private(i)
+			for (i = 0; i < MAXPARTICLES; i++)
+			{
+				Particle& p = ParticlesContainer[i];
+				// Update position of particle.
+				p.Update(deltaTime);
+				// calculate camera distance.
+				p.cameradistance = glm::length2(p.pos - camera.GetPosition());
+				// Update GPU buffer with new positions.
+				g_particule_position_size_data[4 * i + 0] = p.pos.x;
+				g_particule_position_size_data[4 * i + 1] = p.pos.y;
+				g_particule_position_size_data[4 * i + 2] = p.pos.z;
+				g_particule_position_size_data[4 * i + 3] = p.size;
 
-		// Update GPU buffer with colour positions.
-		g_particule_color_data[4 * i + 0] = p.r;
-		g_particule_color_data[4 * i + 1] = p.g;
-		g_particule_color_data[4 * i + 2] = p.b;
-		g_particule_color_data[4 * i + 3] = p.a;
-
+				// Update GPU buffer with colour positions.
+				g_particule_color_data[4 * i + 0] = p.r;
+				g_particule_color_data[4 * i + 1] = p.g;
+				g_particule_color_data[4 * i + 2] = p.b;
+				g_particule_color_data[4 * i + 3] = p.a;
+			}
+		}
+		t = clock() - t;
+		myfile << (float)t / CLOCKS_PER_SEC << ",";
 	}
+	myfile << std::endl;
 }
 
 
