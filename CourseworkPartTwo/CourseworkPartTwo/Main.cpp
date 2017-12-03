@@ -23,8 +23,6 @@
 
 // Number of particles to be generated.
 #define MAXPARTICLES 4096
-
-std::string filePath("omp(4096).csv");
 // Gravational constant
 #define G 6.673e-3 //6.673e-11;
 
@@ -43,8 +41,6 @@ GLFWwindow* window;
 GLuint CameraRight_worldspace_ID;
 GLuint CameraUp_worldspace_ID;
 GLuint ViewProjMatrixID;
-
-std::ofstream myfile;
 
 // This class represents the particle.
 struct Particle
@@ -118,57 +114,46 @@ void SortParticles()
 // It contains one for loop so it has a linear complexity.
 void LoadParticles()
 {
-	myfile << "Loading: " << std::endl;
-	for (int k = 0; k < 5; k++)
+	unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+	std::mt19937 generator(seed);
+	std::uniform_real_distribution<double> uniform01(0.0, 1.0);
+
+	double radius = 100;
+	int i;
+	//#pragma omp parallel for num_threads(numThreads) private(i)
+	for (i = 1; i < MAXPARTICLES; i++)
 	{
-		auto t = clock();
-		for (int l = 0; l < 1000; l++)
-		{
-			unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-			std::mt19937 generator(seed);
-			std::uniform_real_distribution<double> uniform01(0.0, 1.0);
+		double theta = 2 * glm::pi<double>() * uniform01(generator);
+		double phi = acos(1 - 2 * uniform01(generator));
+		double x = sin(phi) * cos(theta) * radius;
+		double y = sin(phi) * sin(theta) * radius;
+		double z = cos(phi) * radius;
 
-			double radius = 100;
-			int i;
-			#pragma omp parallel for num_threads(numThreads) private(i)
-			for (i = 1; i < MAXPARTICLES; i++)
-			{
-				double theta = 2 * glm::pi<double>() * uniform01(generator);
-				double phi = acos(1 - 2 * uniform01(generator));
-				double x = sin(phi) * cos(theta) * radius;
-				double y = sin(phi) * sin(theta) * radius;
-				double z = cos(phi) * radius;
+		ParticlesContainer[i].pos = glm::dvec3(x, y, z);
+		ParticlesContainer[i].velocity = glm::dvec3(0);
+		ParticlesContainer[i].r = rand() % 256;
+		ParticlesContainer[i].g = rand() % 256;
+		ParticlesContainer[i].b = rand() % 256;
+		ParticlesContainer[i].a = 255;
+		ParticlesContainer[i].mass = rand() % 26 + 10;
+		ParticlesContainer[i].size = 5;
 
-				ParticlesContainer[i].pos = glm::dvec3(x, y, z);
-				ParticlesContainer[i].velocity = glm::dvec3(0);
-				ParticlesContainer[i].r = rand() % 256;
-				ParticlesContainer[i].g = rand() % 256;
-				ParticlesContainer[i].b = rand() % 256;
-				ParticlesContainer[i].a = 255;
-				ParticlesContainer[i].mass = rand() % 26 + 10;
-				ParticlesContainer[i].size = 5;
-
-				// Update GPU buffer with colour positions.
-				g_particule_color_data[4 * i + 0] = ParticlesContainer[i].r;
-				g_particule_color_data[4 * i + 1] = ParticlesContainer[i].g;
-				g_particule_color_data[4 * i + 2] = ParticlesContainer[i].b;
-				g_particule_color_data[4 * i + 3] = ParticlesContainer[i].a;
-			}
-
-			//Put the central mass in
-			ParticlesContainer[0].pos = glm::dvec3(0, 0, 0);
-			ParticlesContainer[0].velocity = glm::dvec3(0, 0, 0);
-			ParticlesContainer[0].mass = 10;
-			ParticlesContainer[0].r = 255;
-			ParticlesContainer[0].g = 0;
-			ParticlesContainer[0].b = 0;
-			ParticlesContainer[0].a = 255;
-			ParticlesContainer[0].size = (rand() % 1000) / 2000.0f + 0.1f;
-		}
-		t = clock() - t;
-		myfile << (float)t / CLOCKS_PER_SEC << ",";
+		// Update GPU buffer with colour positions.
+		g_particule_color_data[4 * i + 0] = ParticlesContainer[i].r;
+		g_particule_color_data[4 * i + 1] = ParticlesContainer[i].g;
+		g_particule_color_data[4 * i + 2] = ParticlesContainer[i].b;
+		g_particule_color_data[4 * i + 3] = ParticlesContainer[i].a;
 	}
 
+	//Put the central mass in
+	ParticlesContainer[0].pos = glm::dvec3(0, 0, 0);
+	ParticlesContainer[0].velocity = glm::dvec3(0, 0, 0);
+	ParticlesContainer[0].mass = 10;
+	ParticlesContainer[0].r = 255;
+	ParticlesContainer[0].g = 0;
+	ParticlesContainer[0].b = 0;
+	ParticlesContainer[0].a = 255;
+	ParticlesContainer[0].size = (rand() % 1000) / 2000.0f + 0.1f;
 }
 
 
@@ -176,31 +161,21 @@ void LoadParticles()
 // Contains a nested for loop - O^2. This is the biggest bottleneck in terms of performance.
 void SimulateParticles()
 {
-	myfile << std::endl << "Simulate: " << std::endl;
-	for (int z = 0; z < 5; z++)
+	int i;
+	//#pragma omp parallel for num_threads(numThreads) private(i)
+	for (i = 0; i < MAXPARTICLES; i++)
 	{
-		auto t = clock();
-		for (int l = 0; l < 1000; l++)
+		// Get particle and reset its current force.
+		Particle& p = ParticlesContainer[i];
+		p.ResetForce();
+		for (int j = 0; j < MAXPARTICLES; j++)
 		{
-			int i;
-			#pragma omp parallel for num_threads(numThreads) private(i)
-			for (i = 0; i < MAXPARTICLES; i++)
+			// Update particle as long as it is not itself.
+			if (i != j)
 			{
-				// Get particle and reset its current force.
-				Particle& p = ParticlesContainer[i];
-				p.ResetForce();
-				for (int j = 0; j < MAXPARTICLES; j++)
-				{
-					// Update particle as long as it is not itself.
-					if (i != j)
-					{
-						p.AddForce(ParticlesContainer[j]);
-					}
-				}
+				p.AddForce(ParticlesContainer[j]);
 			}
 		}
-		t = clock() - t;
-		myfile << (float)t / CLOCKS_PER_SEC << ",";
 	}
 }
 
@@ -210,38 +185,27 @@ void SimulateParticles()
 // This is independent data and can be updated in parallel without data race concerns.
 void UpdateParticles(double deltaTime)
 {
-	myfile << std::endl << "Updating: " << std::endl;
-	for (int z = 0; z < 5; z++)
+	int i;
+	//#pragma omp parallel for num_threads(numThreads) private(i)
+	for (i = 0; i < MAXPARTICLES; i++)
 	{
-		auto t = clock();
-		for (int l = 0; l < 1000; l++)
-		{
-			int i;
-			#pragma omp parallel for num_threads(numThreads) private(i)
-			for (i = 0; i < MAXPARTICLES; i++)
-			{
-				Particle& p = ParticlesContainer[i];
-				// Update position of particle.
-				p.Update(deltaTime);
-				// calculate camera distance.
-				p.cameradistance = glm::length2(p.pos - camera.GetPosition());
-				// Update GPU buffer with new positions.
-				g_particule_position_size_data[4 * i + 0] = p.pos.x;
-				g_particule_position_size_data[4 * i + 1] = p.pos.y;
-				g_particule_position_size_data[4 * i + 2] = p.pos.z;
-				g_particule_position_size_data[4 * i + 3] = p.size;
+		Particle& p = ParticlesContainer[i];
+		// Update position of particle.
+		p.Update(deltaTime);
+		// calculate camera distance.
+		p.cameradistance = glm::length2(p.pos - camera.GetPosition());
+		// Update GPU buffer with new positions.
+		g_particule_position_size_data[4 * i + 0] = p.pos.x;
+		g_particule_position_size_data[4 * i + 1] = p.pos.y;
+		g_particule_position_size_data[4 * i + 2] = p.pos.z;
+		g_particule_position_size_data[4 * i + 3] = p.size;
 
-				// Update GPU buffer with colour positions.
-				g_particule_color_data[4 * i + 0] = p.r;
-				g_particule_color_data[4 * i + 1] = p.g;
-				g_particule_color_data[4 * i + 2] = p.b;
-				g_particule_color_data[4 * i + 3] = p.a;
-			}
-		}
-		t = clock() - t;
-		myfile << (float)t / CLOCKS_PER_SEC << ",";
+		// Update GPU buffer with colour positions.
+		g_particule_color_data[4 * i + 0] = p.r;
+		g_particule_color_data[4 * i + 1] = p.g;
+		g_particule_color_data[4 * i + 2] = p.b;
+		g_particule_color_data[4 * i + 3] = p.a;
 	}
-	myfile << std::endl;
 }
 
 
@@ -333,9 +297,6 @@ void Render()
 
 int main(void)
 {
-	myfile.open(filePath);
-
-
 	// Initialise GLFW
 	if (!glfwInit())
 	{
@@ -470,8 +431,6 @@ int main(void)
 
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
-	myfile.close();
-
 	return 0;
 }
 

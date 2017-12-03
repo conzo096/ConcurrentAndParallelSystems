@@ -26,9 +26,8 @@
 #include <curand_kernel.h>
 
 // Number of particles to be generated.
-#define MAXPARTICLES 10000
+#define MAXPARTICLES 4096
 #define THREADSPERBLOCK 64
-std::string filePath("Cudaload10000.csv");
 // Gravational constant
 #define G 6.673e-3 //6.673e-11;
 
@@ -123,7 +122,6 @@ GLuint billboard_vertex_buffer;
 Particle *buffer_particles;
 auto data_size = sizeof(Particle) * MAXPARTICLES;
 
-std::ofstream myfile;
 __device__ void random(float* result, int MAX,int i) {
 	/* CUDA's random number library uses curandState_t to keep track of the seed value
 	we will store a random state for every thread  */
@@ -164,7 +162,6 @@ __device__ void random(unsigned char* result, int MAX,int i) {
 __global__ void LoadParticlesGPU(Particle* particles, int radius,int numParticles)
 {
 	unsigned int i = blockIdx.x*blockDim.x + threadIdx.x;
-
 	float temp;
 	random(&temp, 1, i);
 	double theta = 2 * glm::pi<double>() * temp;
@@ -199,8 +196,7 @@ __global__ void SimulateParticlesGPU(Particle* particles, int numParticles)
 {
 	//unsigned int i = blockIdx.y*blockDim.y + threadIdx.y;
 	unsigned int j = blockIdx.x*blockDim.x + threadIdx.x;
-	for(int k=j; k < j+numParticles;k++)
-	for (int i = 0; i<numParticles; i++)
+	for (int k = 0; k<numParticles; k++)
 	{
 		if (k != j)
 		{
@@ -218,14 +214,11 @@ __global__ void SimulateParticlesGPU(Particle* particles, int numParticles)
 //Updates particles based on their total force.
 __global__ void UpdateParticlesGPU(Particle* particles, float deltaTime, glm::vec3 cam)
 {
-	unsigned int j = blockIdx.x*blockDim.x + threadIdx.x;
-	for(int i=j; i < j+numParticles;i++)
-	{
-		particles[i].velocity += (particles[i].force / particles[i].mass);
-		particles[i].pos += deltaTime * particles[i].velocity;
-		particles[i].force = glm::dvec3(0);
-		particles[i].cameradistance = glm::length2(particles[i].pos - cam);
-	}
+	unsigned int i = blockIdx.x*blockDim.x + threadIdx.x;
+	particles[i].velocity += (particles[i].force / particles[i].mass);
+	particles[i].pos += deltaTime * particles[i].velocity;
+	particles[i].force = glm::dvec3(0);
+	particles[i].cameradistance = glm::length2(particles[i].pos - cam);
 }
 
 
@@ -253,6 +246,7 @@ void LoadParticles()
 	// Update particles on gpu.
 	LoadParticlesGPU << <nBlocks, THREADSPERBLOCK >> > (buffer_particles, 100, MAXPARTICLES);
 	cudaDeviceSynchronize();
+	
 }
 
 
@@ -272,9 +266,9 @@ void Update(double deltaTime)
 	delta_y *= ratio_height;
 	camera.Rotate(static_cast<float>(delta_x), static_cast<float>(-delta_y)); // flipped y to revert the invert.
 	camera.Update(deltaTime);
-	SimulateParticlesGPU << <1,1 >> > (buffer_particles, MAXPARTICLES);
+	SimulateParticlesGPU << <nBlocks, THREADSPERBLOCK >> > (buffer_particles, MAXPARTICLES);
 	cudaDeviceSynchronize();
-	UpdateParticlesGPU << <1,1 >> >(buffer_particles, deltaTime,camera.GetPosition());
+	UpdateParticlesGPU << <nBlocks, THREADSPERBLOCK >> >(buffer_particles, deltaTime,camera.GetPosition());
 	cudaDeviceSynchronize();
 	// Copy required data back to their buffers.
 	cudaMemcpy(&ParticlesContainer[0], buffer_particles, data_size, cudaMemcpyDeviceToHost);
@@ -360,7 +354,6 @@ void Render()
 
 int main(void)
 {
-	myfile.open(filePath);
 	// Initialise GLFW
 	if (!glfwInit())
 	{
@@ -487,6 +480,5 @@ int main(void)
 	cudaFree(buffer_particles);
 	// Close OpenGL window and terminate GLFW
 	glfwTerminate();
-	myfile.close();
 	return 0;
 }
