@@ -24,12 +24,12 @@
 // Number of particles to be generated.
 #define MAXPARTICLES 4096
 
-std::string filePath("ompInit(4096).csv");
+std::string filePath("omp(4096).csv");
 // Gravational constant
 #define G 6.673e-3 //6.673e-11;
 
 // Get the number of threads this hardware can support.
-int numThreads = 1;// std::thread::hardware_concurrency();
+int numThreads =  std::thread::hardware_concurrency();
 
 // Texture to make the particle a round shape.
 Texture tex;
